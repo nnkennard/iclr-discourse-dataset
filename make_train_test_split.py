@@ -110,7 +110,7 @@ def get_stratified_forums(conference, client):
 
   clean = dict(forum_name_map)
 
-  return Conference(conference, clean, INVITATION_MAP[conference])
+  return Conference(conference, clean, INVITATION_MAP[conference])._asdict()
 
 
 def get_unstructured_ids(conference, client):
@@ -125,7 +125,7 @@ def get_sampled_forums(conference, client, sample_rate):
   else:
     random.shuffle(forums)
     forums = forums[:int(sample_rate * len(forums))]
-  return Conference(conference, forums, INVITATION_MAP[conference])
+  return Conference(conference, forums, INVITATION_MAP[conference])._asdict()
 
 
 TEST_SAMPLE_RATE = 0.1
@@ -145,7 +145,7 @@ def main():
   guest_client = openreview.Client(baseurl='https://api.openreview.net')
   output_file = "".join([args.outputdir, "/iclr_discourse_dataset_split.json"])
   with open(output_file, 'w') as f:
-    f.write(json.dumps(get_datasets(guest_client)))
+    json.dump(get_datasets(guest_client), f)
 
 
 if __name__ == "__main__":
