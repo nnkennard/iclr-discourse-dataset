@@ -17,7 +17,6 @@ parser.add_argument('-s', '--debug', action="store_true",
     help='if True, truncate the example list')
 
 
-
 def main():
 
   args = parser.parse_args()
