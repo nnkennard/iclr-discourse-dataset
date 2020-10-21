@@ -1,6 +1,6 @@
 # ICLR Discourse Dataset
 
-To set up the environment and build the databasr, run
+To set up the environment and build the database, run
 
 ```
 bash setup.sh
