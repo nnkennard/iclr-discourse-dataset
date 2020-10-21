@@ -6,6 +6,8 @@ To set up the environment and build the database, run
 bash setup.sh
 ```
 
+This step takes about 30 minutes.
+
 `example.py` can be used to dump examples to stdout.
 
 ```
