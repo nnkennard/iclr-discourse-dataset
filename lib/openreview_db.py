@@ -121,12 +121,12 @@ def crunch_text_rows(rows):
 
   for row in rows:
     supernote, chunk, sentence, token = (row["comment_supernote"],
-        row["chunk"], row["sentence"], row["token"])
+        row["chunk_idx"], row["sentence_idx"], row["token"])
     texts_builder[supernote][chunk][sentence].append(token)
 
   texts = {}
   for supernote, chunk_dict in texts_builder.items():
-    texts[supernote] = [collapse_dict(sentence) for sentence in 
-    collapse_dict(chunk_dict)]
+    texts[supernote] = [collapse_dict(sentence) 
+        for sentence in collapse_dict(chunk_dict)]
 
   return texts
