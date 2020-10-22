@@ -173,9 +173,37 @@ def restructure_forum(forum_structure, note_map):
     }
 
   # Order by creation date
-  ordered_children = sorted(forum_structure.keys(), key=lambda x:
-      note_map[x].tcdate)
+  ordered_children = list(reversed(sorted(forum_structure.keys(), key=lambda x:
+      note_map[x].tcdate)))
 
+  twin_map = collections.defaultdict(lambda:collections.defaultdict(list)) # Twins are two siblings whose author is the same
+  for child, parent in forum_structure.items():
+    child_author = flatten_signature(note_map[child])
+    twin_map[parent][child_author].append(child)
+
+  twin_list = []
+  for parent, child_authors in twin_map.items():
+    for author, twins in child_authors.items():
+      if author == "(anonymous)":
+        continue
+      if len(twins) > 1:
+        twin_list.append(twins)
+
+  root = None
+  for child, parent in forum_structure.items():
+    if parent is None:
+      root = child
+      break
+
+  twin_to_oldest_twin = {}
+  for twins in twin_list:
+    oldest_twin = None
+    for child in ordered_children:
+      if child in twins:
+        if oldest_twin is not None:
+          twin_to_oldest_twin[child] = oldest_twin
+        else:
+          oldest_twin = child
 
   for child in ordered_children:
     parent = forum_structure[child]
@@ -191,6 +219,11 @@ def restructure_forum(forum_structure, note_map):
           equiv_classes[k]+= list(equiv_classes[child])
           del equiv_classes[child]
           break
+    elif child in twin_to_oldest_twin:
+      oldest_twin = twin_to_oldest_twin[child]
+      equiv_classes[oldest_twin]+= list(equiv_classes[child])
+      del(equiv_classes[child])
+
    
   # Maps each merged comment's id to the top parent id of its chain
   equiv_map = {None:"None"}
@@ -303,6 +336,29 @@ def get_forum_structure(forum_id, or_client):
   return parents, note_map
 
 
+def remove_problem_pairs(pairs):
+  """Remove pairs we are not able to deal with at the moment.
+
+    This includes pairs where there are responses to continuations.
+
+    Args:
+      pairs: list of parent, child pairs
+
+    Returns:
+      clean_pairs: list of parent, child pairs without repetitions
+  """
+  parents, children = zip(*pairs)
+  parents_counter = collections.Counter(parents)
+  children_counter = collections.Counter(children)
+
+  clean_pairs = []
+  for parent, child in pairs:
+    if parents_counter[parent] == children_counter[child] == 1:
+      clean_pairs.append((parent, child))
+
+  return clean_pairs
+
+
 def build_dataset(forum_ids, or_client, corenlp_client, conn, conference,
     set_split, table, debug):
   """Initializes and dumps to sqlite3 database.
@@ -320,7 +376,7 @@ def build_dataset(forum_ids, or_client, corenlp_client, conn, conference,
         or_client, invitation=INVITATION_MAP[conference])
   forums = [n.forum for n in submissions if n.forum in forum_ids]
   if debug:
-    forums = forums[:10]
+    forums = forums[:50]
 
   forum_map, note_map = get_forum_map(forums, or_client)
   text_rows = []
@@ -328,7 +384,6 @@ def build_dataset(forum_ids, or_client, corenlp_client, conn, conference,
 
   for forum_id, forum_struct in tqdm(forum_map.items()):
     equiv_classes, equiv_map = restructure_forum(forum_struct, note_map)
-
 
     # Adding tokenized text of each comment to text table
     for supernote, subnotes in equiv_classes.items():
