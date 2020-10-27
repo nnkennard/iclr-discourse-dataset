@@ -7,30 +7,27 @@ import random
 
 from tqdm import tqdm
 
-#import openreview_lib as orl
+from lib.openreview_lib import Conference
 
-class ConferenceName(object):
-  iclr18 = "iclr18"
-  iclr19 = "iclr19"
-  iclr20 = "iclr20"
-  ALL = [iclr18, iclr19, iclr20]
-
-INVITATION_MAP = {
-    ConferenceName.iclr18:'ICLR.cc/2018/Conference/-/Blind_Submission',
-    ConferenceName.iclr19:'ICLR.cc/2019/Conference/-/Blind_Submission',
-    ConferenceName.iclr20:'ICLR.cc/2020/Conference/-/Blind_Submission',
-}
-
-Conference = collections.namedtuple("Conference", "conference id_map url".split())
 
 parser = argparse.ArgumentParser(
-    description='Create stratified train/dev/test split of ICLR 2018 - 2020 forums.')
+    description='Create train/dev/test split of ICLR 2018 - 2020 forums.')
 parser.add_argument('-o', '--outputdir', default="splits/",
     type=str, help="Where to dump output json file")
 
+
+INVITATION_MAP = {
+    Conference.iclr18:'ICLR.cc/2018/Conference/-/Blind_Submission',
+    Conference.iclr19:'ICLR.cc/2019/Conference/-/Blind_Submission',
+    Conference.iclr20:'ICLR.cc/2020/Conference/-/Blind_Submission',
+}
+
+ForumList = collections.namedtuple("ForumList",
+                                   "conference forums url".split())
+
 random.seed(23)
 
-def get_forum_ids(guest_client, forum_id):
+def get_notes(guest_client, forum_id):
   return guest_client.get_notes(forum=forum_id)
 
 TRAIN, DEV, TEST = ("train", "dev", "test")
@@ -42,12 +39,6 @@ def split_forums(forums):
 
   return (forums[:train_threshold],
       forums[train_threshold:dev_threshold], forums[dev_threshold:])
-
-class Forum(object):
-  def __init__(self, forum_id, client):
-    self.forum_id = forum_id
-    notes = client.get_notes(forum=forum_id)
-    self.num_notes = len(notes)
 
 
 def get_all_conference_forums(conference, client):
@@ -61,7 +52,7 @@ def get_stratified_forums(conference, client):
   forum_to_len_map = {}
 
   for forum in tqdm(forums):
-    num_comments = len(get_forum_ids(client, forum.id))
+    num_comments = len(get_notes(client, forum.id))
     forums_by_len[num_comments].append(forum.id)
     forum_to_len_map[forum.id] = num_comments
 
@@ -110,7 +101,7 @@ def get_stratified_forums(conference, client):
 
   clean = dict(forum_name_map)
 
-  return Conference(conference, clean, INVITATION_MAP[conference])._asdict()
+  return ForumList(conference, clean, INVITATION_MAP[conference])._asdict()
 
 
 def get_unstructured_ids(conference, client):
@@ -125,15 +116,15 @@ def get_sampled_forums(conference, client, sample_rate):
   else:
     random.shuffle(forums)
     forums = forums[:int(sample_rate * len(forums))]
-  return Conference(conference, forums, INVITATION_MAP[conference])._asdict()
+  return ForumList(conference, forums, INVITATION_MAP[conference])._asdict()
 
 
 TEST_SAMPLE_RATE = 0.1
 def get_datasets(client):
   return {
-      "unstructured": get_unstructured_ids(ConferenceName.iclr18, client),
-      "traindev": get_stratified_forums(ConferenceName.iclr19, client),
-      "truetest": get_sampled_forums(ConferenceName.iclr20, client,
+      "unstructured": get_unstructured_ids(Conference.iclr18, client),
+      "traindev": get_stratified_forums(Conference.iclr19, client),
+      "truetest": get_sampled_forums(Conference.iclr20, client,
         TEST_SAMPLE_RATE) 
       }
 
