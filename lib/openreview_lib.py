@@ -2,14 +2,12 @@ import collections
 import json
 import openreview
 
-from recordtype import recordtype
 from tqdm import tqdm
-
 import lib.openreview_db as ordb
 
 
-ANNOTATORS = "ssplit tokenize"
-
+CORENLP_ANNOTATORS = "ssplit tokenize"
+Pair = collections.namedtuple("Pair", "forum review rebuttal".split())
 
 class Conference(object):
   iclr18 = "iclr18"
@@ -54,29 +52,13 @@ INVITATION_MAP = {
     Conference.iclr20:'ICLR.cc/2020/Conference/-/Blind_Submission',
 }
 
-
-def is_review(maybe_review_sid, forum, note_map):
-  note = note_map[maybe_review_sid]
-  return (shorten_author(flatten_signature(note)) == AuthorCategories.REVIEWER
-          and note.replyto == forum)
-
-
-def is_rebuttal(maybe_rebuttal_sid, equiv_map, forum, note_map):
-  maybe_rebuttal = note_map[maybe_rebuttal_sid]
-  parent_note = maybe_rebuttal.replyto
-  assert parent_note in equiv_map
-  parent_sid = equiv_map[parent_note]
-  return (shorten_author(flatten_signature(note)) == AuthorCategories.AUTHOR
-          and is_review(parent_sid, forum, note_map))
-
-
-# TODO(nnk): What is this??
+# This is just to have a split name available for the column
 FAKE_SPLIT_MAP = {ordb.TextTables.UNSTRUCTURED: "train",
                   ordb.TextTables.TRUE_TEST: "test"}
 
-# TODO(nnk): What is in the dataset file? Is it only reviews and rebuttals?
+
 def get_datasets(dataset_file, corenlp_client, conn, debug=False):
-  """Given a dataset file, enter it into a sqlite3 database. 
+  """Given a dataset file, enter its reviews and rebuttals into a database. 
 
     Args:
       dataset_file: json file produced by make_train_test_split.py
@@ -91,8 +73,9 @@ def get_datasets(dataset_file, corenlp_client, conn, debug=False):
   guest_client = openreview.Client(baseurl='https://api.openreview.net')
 
   for subset, subset_info in dataset_obj.items():
-    forum_ids = subset_info["id_map"]
+    forum_ids = subset_info["forums"]
     conference = subset_info["conference"]
+
     if subset == ordb.TextTables.TRAIN_DEV:
       for set_split, set_forum_ids in forum_ids.items():
         build_dataset(set_forum_ids, guest_client, corenlp_client, conn,
@@ -103,138 +86,12 @@ def get_datasets(dataset_file, corenlp_client, conn, debug=False):
                     conference, fake_split, subset, debug)
 
 
-def get_nonorphans(parents):
-  """Remove children whose parents have been deleted for some reason.
-  
-    Args:
-      parents: A map from the id of each child comment to the id of its parent
-
-    Returns:
-      A new map that only include non-deleted comments
-
-    This addresses the problem of orphan subtrees caused by deleted comments.
-  """
-
-  # TODO(nnk): Why does this work??
-
-  children = collections.defaultdict(list)
-  for child, parent in parents.items():
-    children[parent].append(child)
-
-  descendants = sum(children.values(), [])
-  ancestors = children.keys()
-  nonchildren = set(ancestors) - set(descendants)
-  orphans = sorted(list(nonchildren - set([None])))
-
-  while orphans:
-    # Add orphan's children as their parent's children instead
-    current_orphan = orphans.pop()
-    orphans += children[current_orphan]
-    del children[current_orphan]
-
-  new_parents = {}
-  # Create a new map in the same format but only with non-orphan children
-  for parent, child_list in children.items():
-    for child in child_list:
-      assert child not in new_parents
-      new_parents[child] = parent
-
-  return new_parents 
-
-
 def flatten_signature(note):
   """Map signature field to a deterministic string.
      Tbh it looks like most signatures are actually only 1 author long..
   """
   assert len(note.signatures) == 1
   return  "|".join(sorted(sig.split("/")[-1] for sig in note.signatures))
-
-
-def restructure_forum(forum_structure, note_map):
-  """Merge parent-child comment pairs that are intended to be continuations.
-    Args:
-      forum_structure: The structure of one forum in {parent:child} format
-      note_map: A map from the note ids to the note in openreview.Note format
-
-    Returns:
-      equiv_classes: map from top comment to a list of all its continuation
-      comments
-      equiv_map: map from each comment to the top parent of the continuation it
-      is a part of (map to themselves if they are not a continuation)
-  """
-
-  notes = set(
-      forum_structure.keys()).union(set(
-        forum_structure.values())) - set([None])
-
-  # Each equivalence class is named with the top comment, and contains all
-  # supposed continuations (direct descendants where the authors of all the
-  # descendants are the same as the top comment)
-  equiv_classes = {
-      note_id:[note_id] for note_id in notes 
-    }
-
-  # Order by creation date
-  ordered_children = list(reversed(sorted(forum_structure.keys(), key=lambda x:
-      note_map[x].tcdate)))
-
-  twin_map = collections.defaultdict(lambda:collections.defaultdict(list)) # Twins are two siblings whose author is the same
-  for child, parent in forum_structure.items():
-    child_author = flatten_signature(note_map[child])
-    twin_map[parent][child_author].append(child)
-
-  twin_list = []
-  for parent, child_authors in twin_map.items():
-    for author, twins in child_authors.items():
-      if author == "(anonymous)":
-        continue
-      if len(twins) > 1:
-        twin_list.append(twins)
-
-  root = None
-  for child, parent in forum_structure.items():
-    if parent is None:
-      root = child
-      break
-
-  twin_to_oldest_twin = {}
-  for twins in twin_list:
-    oldest_twin = None
-    for child in ordered_children:
-      if child in twins:
-        if oldest_twin is not None:
-          twin_to_oldest_twin[child] = oldest_twin
-        else:
-          oldest_twin = child
-
-  for child in ordered_children:
-    parent = forum_structure[child]
-    if parent is None:
-      continue
-    child_note = note_map[child]
-    parent_note = note_map[parent]
-    # Check authors
-    if flatten_signature(child_note) == flatten_signature(parent_note):
-      for k, v in equiv_classes.items():
-        if parent in v:
-          # Merge these two equivalence classes
-          equiv_classes[k]+= list(equiv_classes[child])
-          del equiv_classes[child]
-          break
-    elif child in twin_to_oldest_twin:
-      oldest_twin = twin_to_oldest_twin[child]
-      equiv_classes[oldest_twin]+= list(equiv_classes[child])
-      del(equiv_classes[child])
-
-   
-  # Maps each merged comment's id to the top parent id of its chain
-  equiv_map = {None:"None"}
-  for supernote, subnotes in equiv_classes.items():
-    for subnote in subnotes:
-      equiv_map[subnote] = supernote
-
-
-  return equiv_classes, equiv_map
 
 
 TOKEN_INDEX = 1  # Index of token field in conll output
@@ -275,90 +132,119 @@ def get_tokenized_chunks(corenlp_client, text):
       for chunk in chunks]
 
 
-def get_info(note_id, note_map):
-  """Gets relevant note metadata.
+def get_forum_pairs(forum_id, note_map):
+  top_children = [note
+                  for note in note_map.values()
+                  if note.replyto == forum_id]
+  review_ids = [note.id
+                for note in top_children
+                if shorten_author(
+                    flatten_signature(note)) == AuthorCategories.REVIEWER]
+  return [Pair(forum=forum_id, review=note.replyto, rebuttal=note.id)
+      for note in note_map.values()
+      if (note.replyto in review_ids
+          and shorten_author(
+              flatten_signature(note)) == AuthorCategories.AUTHOR)]
+
+
+def get_descendant_path(sid, ordered_notes):
+  sid_index = None
+  for i, note in enumerate(ordered_notes):
+    if note.id == sid:
+      sid_index = i
+      root_note = note
+      break
+  assert sid_index is not None
+  descendants = [root_note]
+  for i, note in enumerate(ordered_notes):
+    if i <= sid_index:
+      continue
+    else:
+      if (note.replyto == descendants[-1].id 
+              and flatten_signature(note) == flatten_signature(descendants[-1])):
+        descendants.append(note)
+  return [desc.id for desc in descendants[1:]]
+
+       
+
+def build_sid_map(note_map):    
+  sid_map = {}
+  ordered_notes = sorted(note_map.values(), key=lambda x:x.tcdate)
+  seen_notes = set()
+
+  for i, note in enumerate(ordered_notes):
+    if note.id in seen_notes:
+      continue
+    siblings = [sib.id
+            for sib in ordered_notes[i+1:]
+            if sib.replyto == note.replyto
+            and flatten_signature(sib) == flatten_signature(note)]
+    descendants = get_descendant_path(note.id, ordered_notes)
+    if siblings and descendants: # This is too complicated to detangle
+      continue
+    else:
+      notes = [note.id] + siblings + descendants
+      seen_notes.update(notes)
+      sid_map[note.id] = notes
+
+  return sid_map
+
+
+def get_review_rebuttal_pairs(forums, or_client):
+  """From a list of forums, extract review and rebuttal pairs.
+  
     Args:
-      note_id: the note id from the openreview.Note object
-      note_map: a map from note ids to relevant openreview.Note objects
+      forums: A list of forum ids (directly from OR API)
+
     Returns:
-      The creation date and the authors of the note.
-   """
-  note = note_map[note_id]
-  if note.replyto is None:
-    return "root", "", note.tcdate, flatten_signature(note)
-  else:
-    for text_type in ["review", "comment", "withdrawal confirmation",
-    "metareview"]:
-      if text_type in note.content:
-        return text_type, note.content[text_type], note.tcdate, flatten_signature(note)
-    assert False
+      sid_map: A map from sids to a list of comments they encompass
+      review_rebuttal_pairs: A list of pairs of sids (supernote ids)
 
-def get_forum_map(forums, or_client):
-  """Retrieve notes and structure for all forums in this Dataset.
-
-  Args:
-    forums: list of forum ids to retrieve
-    or_client: openreview client
-
-  Returns:
-    root_map: map from forum id (root of comment tree) to forum structure
-    note_map: map from note id to openreview.Note object
   """
-  root_map = {}
-  note_map = {}
+  review_rebuttal_pairs = []
+  sid_map = {}
   for forum_id in forums:
-    forum_structure, forum_note_map = get_forum_structure(forum_id,
-        or_client)
-    root_map[forum_id] = forum_structure
-    note_map.update(forum_note_map)
+    note_map = {note.id: note
+            for note in or_client.get_notes(forum=forum_id)}
 
-  return root_map, note_map
+    forum_pairs = get_forum_pairs(forum_id, note_map)
+    forum_sid_map = build_sid_map(note_map)
+    print("Forum pairs: ", forum_pairs)
+    print("SID map keys:", forum_sid_map.keys())
+    sid_pairs = [pair for pair in forum_pairs if
+            set(pair).issubset(forum_sid_map.keys())]
+    print("SID pairs:", sid_pairs)
+    print()
 
+    assert (len(sid_pairs) == len(set(sid_pairs))
+            == len(set(x.review for x in sid_pairs))
+            == len(set(x.rebuttal for x in sid_pairs)))
 
-def get_forum_structure(forum_id, or_client):
-  """Retrieves structure and notes of a forum.
+    sid_map.update(forum_sid_map)
+    review_rebuttal_pairs += sid_pairs
+  
+  return sid_map, review_rebuttal_pairs
 
-  Args:
-    forum_id: id of forum to retrieve
-    or_client: openreview client
+    
+def get_text_from_note_list(note_list, corenlp_client):
+  chunk_offset = 0
+  for subnote in subnotes:
+    text_type, text, _, subnote_author = get_info(subnote, note_map)
+    assert subnote_author == supernote_author
+    chunks = get_tokenized_chunks(corenlp_client, text)
 
-  Returns:
-    parents: forum structure in {child_id:parent_id} format
-    note_map: map from note ids to openreview.Note objects
-  """
-  notes = or_client.get_notes(forum=forum_id)
-  naive_note_map = {note.id:note for note in notes} # includes orphans
-  naive_parents = {note.id:note.replyto for note in notes}
+    for chunk_idx, chunk in enumerate(chunks):
+      for sentence_idx, sentence in enumerate(chunk):
+        for token_idx, token in enumerate(sentence):
+          new_row = ordb.CommentRow(**supernote_as_dict)
+          new_row.chunk_idx = chunk_idx + chunk_offset
+          new_row.sentence_idx = sentence_idx
+          new_row.token_idx = token_idx
+          new_row.token = token
+          new_row.original_id = subnote
+          text_rows.append(new_row)
 
-  parents = get_nonorphans(naive_parents)
-  available_notes = set(parents.keys()).union(
-      set(parents.values())) - set([None])
-  note_map = {note:naive_note_map[note] for note in available_notes}
-
-  return parents, note_map
-
-
-def remove_problem_pairs(pairs):
-  """Remove pairs we are not able to deal with at the moment.
-
-    This includes pairs where there are responses to continuations.
-
-    Args:
-      pairs: list of parent, child pairs
-
-    Returns:
-      clean_pairs: list of parent, child pairs without repetitions
-  """
-  parents, children = zip(*pairs)
-  parents_counter = collections.Counter(parents)
-  children_counter = collections.Counter(children)
-
-  clean_pairs = []
-  for parent, child in pairs:
-    if parents_counter[parent] == children_counter[child] == 1:
-      clean_pairs.append((parent, child))
-
-  return clean_pairs
+    chunk_offset += len(chunks)
 
 
 def build_dataset(forum_ids, or_client, corenlp_client, conn, conference,
@@ -374,54 +260,27 @@ def build_dataset(forum_ids, or_client, corenlp_client, conn, conference,
     set_split: train/dev/test
     debug: if True, truncate example list to 10 examples
   """
-  submissions = openreview.tools.iterget_notes(
+  all_conference_notes = openreview.tools.iterget_notes(
         or_client, invitation=INVITATION_MAP[conference])
-  forums = [n.forum for n in submissions if n.forum in forum_ids]
+  forums = [n.forum
+            for n in all_conference_notes
+            if n.forum in forum_ids]
   if debug:
     forums = forums[:10]
 
-  forum_map, note_map = get_forum_map(forums, or_client)
-  text_rows = []
-  pair_rows = []
+  sid_map, review_rebuttal_pairs = get_review_rebuttal_pairs(forums, or_client)
+  
+  for pair in review_rebuttal_pairs:
+    forum_notes = or_client.get_notes(forum=pair.forum)
+    assert forum_notes[0].id == pair.forum
+    forum_title = forum_notes[0].content["title"]
+    review_author, = [flatten(note.signature)
+                      for note in forum_notes
+                      if note.id == pair.review]
+    print(review_author)
+    dsds
 
-  for forum_id, forum_struct in tqdm(forum_map.items()):
-    equiv_classes, equiv_map = restructure_forum(forum_struct, note_map)
 
-    # Adding tokenized text of each comment to text table
-    for supernote, subnotes in equiv_classes.items():
-      if is_review(supernote, forum_id, note_map):
-        comment_type = "review"
-      elif is_rebuttal(supernote, equiv_map, forum_id, note_map):
-        pair_rows.append(  # (review, rebuttal, set_split)
-            (equiv_map[note_map[supernote].replyto], supernote, set_split))
-        comment_type = "rebuttal"
-      else:
-        comment_type = "other"
-      text_type, _, timestamp, supernote_author = get_info(supernote, note_map)
-      author_type = shorten_author(supernote_author)
-      supernote_as_dict = ordb.CommentRow(
-          forum_id, set_split, equiv_map[forum_struct[supernote]], supernote, 
-          timestamp, supernote_author, author_type, text_type, 
-          comment_type)._asdict()
-      chunk_offset = 0
-      for subnote in subnotes:
-        text_type, text, _, subnote_author = get_info(subnote, note_map)
-        assert subnote_author == supernote_author
-        chunks = get_tokenized_chunks(corenlp_client, text)
-        
-        for chunk_idx, chunk in enumerate(chunks):
-          for sentence_idx, sentence in enumerate(chunk):
-            for token_idx, token in enumerate(sentence):
-              new_row = ordb.CommentRow(**supernote_as_dict)
-              new_row.chunk_idx = chunk_idx + chunk_offset
-              new_row.sentence_idx = sentence_idx
-              new_row.token_idx = token_idx
-              new_row.token = token
-              new_row.original_id = subnote
-              text_rows.append(new_row)
+  # Tokenize all relevant comments
 
-        chunk_offset += len(chunks)
-
-  ordb.insert_into_comments(conn, table, text_rows)
-  ordb.insert_into_pairs(conn, table + "_pairs", pair_rows)
 

@@ -50,7 +50,7 @@ CREATE_PAIR_TABLE =  """ CREATE TABLE IF NOT EXISTS {0} (
     review_sid text NOT NULL,
     rebuttal_sid text NOT NULL,
     split text NOT NULL,
-    title text NOT NULL
+    title text NOT NULL,
     review_author NOT NULL,
     PRIMARY KEY (review_sid, rebuttal_sid)); """
 # No rebuttal author because rebuttal author should always be Authors.

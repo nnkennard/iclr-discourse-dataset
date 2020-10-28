@@ -24,7 +24,7 @@ def main():
   if conn is not None:
     ordb.create_tables(conn)
     with corenlp.CoreNLPClient(
-        annotators=orl.ANNOTATORS, output_format='conll') as corenlp_client:
+        annotators=orl.CORENLP_ANNOTATORS, output_format='conll') as corenlp_client:
       orl.get_datasets(
           args.inputfile, corenlp_client, conn, debug=args.debug)  
   else:
