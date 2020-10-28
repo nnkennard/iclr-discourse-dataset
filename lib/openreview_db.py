@@ -21,12 +21,6 @@ def dict_factory(cursor, row):
     d[col[0]] = row[idx]
   return d
 
-FIELDS = """forum_id split parent_supernote comment_supernote
-  timestamp author author_type or_text_type
-  comment_type original_id chunk_idx sentence_idx
-  token_idx token"""
-COMMA_SEP_FIELDS = ", ".join(FIELDS.split())
-CommentRow = recordtype("CommentRow", FIELDS, default=None)
 
 
 class TextTables(object):
@@ -53,17 +47,20 @@ def create_tables(conn):
 
 
 CREATE_PAIR_TABLE =  """ CREATE TABLE IF NOT EXISTS {0} (
-    review_supernote text NOT NULL,
-    rebuttal_supernote text NOT NULL,
+    review_sid text NOT NULL,
+    rebuttal_sid text NOT NULL,
     split text NOT NULL,
+    title text NOT NULL
+    review_author NOT NULL,
+    PRIMARY KEY (review_sid, rebuttal_sid)); """
+# No rebuttal author because rebuttal author should always be Authors.
 
-    PRIMARY KEY (review_supernote, rebuttal_supernote)); """
 
 CREATE_TEXT_TABLE = """ CREATE TABLE IF NOT EXISTS {0} (
     forum_id text NOT NULL,
     split text NOT NULL,
-    parent_supernote text NOT NULL,
-    comment_supernote text NOT NULL,
+    parent_sid text NOT NULL,
+    sid text NOT NULL,
 
     timestamp text NOT NULL,
     author text NOT NULL,
@@ -71,7 +68,7 @@ CREATE_TEXT_TABLE = """ CREATE TABLE IF NOT EXISTS {0} (
     or_text_type text NOT NULL,
     comment_type text NOT NULL,
 
-    original_id text NOT NULL,
+    orig_id text NOT NULL,
     chunk_idx integer NOT NULL,
     sentence_idx integer NOT NULL,
     token_idx integer NOT NULL,
@@ -79,16 +76,23 @@ CREATE_TEXT_TABLE = """ CREATE TABLE IF NOT EXISTS {0} (
 
     PRIMARY KEY (original_id, chunk_idx, sentence_idx, token_idx)); """
 
+FIELDS = """forum_id split parent_sid sid
+  timestamp author author_type or_text_type
+  comment_type orig_id chunk_idx sentence_idx
+  token_idx token"""
+COMMA_SEP_FIELDS = ", ".join(FIELDS.split())
+#CommentRow = recordtype("CommentRow", FIELDS, default=None)
+#TextRow = recordtype("TextRow", FIELDS.split(), default=None)
+
 
 def insert_into_pairs(conn, table, pair_rows):
   """Insert a record into the datasets table (train-test split)."""
-  cmd = ''' INSERT INTO {0} (review_supernote, rebuttal_supernote, split)
-              VALUES(?, ?, ?); '''.format(table)
+  cmd = ("INSERT INTO {0} (review_sid, rebuttal_sid, split, title, "
+          "review_author) VALUES(?, ?, ?);").format(table)
   cur = conn.cursor()
   for row in pair_rows:
     cur.execute(cmd, row)
   conn.commit()
-
 
 
 def insert_into_comments(conn, table, forum_rows):
@@ -120,7 +124,7 @@ def crunch_text_rows(rows):
     collections.defaultdict(list)))
 
   for row in rows:
-    supernote, chunk, sentence, token = (row["comment_supernote"],
+    supernote, chunk, sentence, token = (row["sid"],
         row["chunk_idx"], row["sentence_idx"], row["token"])
     texts_builder[supernote][chunk][sentence].append(token)
 

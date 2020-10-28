@@ -55,24 +55,26 @@ INVITATION_MAP = {
 }
 
 
-def is_review(note_id, forum, note_map):
-  note = note_map[note_id]
+def is_review(maybe_review_sid, forum, note_map):
+  note = note_map[maybe_review_sid]
   return (shorten_author(flatten_signature(note)) == AuthorCategories.REVIEWER
           and note.replyto == forum)
 
 
-def is_rebuttal(supernote_id, equiv_map, forum, note_map):
-  note = note_map[supernote_id]
-  parent_note = note.replyto
+def is_rebuttal(maybe_rebuttal_sid, equiv_map, forum, note_map):
+  maybe_rebuttal = note_map[maybe_rebuttal_sid]
+  parent_note = maybe_rebuttal.replyto
   assert parent_note in equiv_map
-  parent_supernote = equiv_map[parent_note]
+  parent_sid = equiv_map[parent_note]
   return (shorten_author(flatten_signature(note)) == AuthorCategories.AUTHOR
-          and is_review(parent_supernote, forum, note_map))
+          and is_review(parent_sid, forum, note_map))
 
 
+# TODO(nnk): What is this??
 FAKE_SPLIT_MAP = {ordb.TextTables.UNSTRUCTURED: "train",
                   ordb.TextTables.TRUE_TEST: "test"}
 
+# TODO(nnk): What is in the dataset file? Is it only reviews and rebuttals?
 def get_datasets(dataset_file, corenlp_client, conn, debug=False):
   """Given a dataset file, enter it into a sqlite3 database. 
 
@@ -370,13 +372,13 @@ def build_dataset(forum_ids, or_client, corenlp_client, conn, conference,
     conn: sqlite3 connection
     conference: conference name
     set_split: train/dev/test
-    debug: if True, truncate example list
+    debug: if True, truncate example list to 10 examples
   """
   submissions = openreview.tools.iterget_notes(
         or_client, invitation=INVITATION_MAP[conference])
   forums = [n.forum for n in submissions if n.forum in forum_ids]
   if debug:
-    forums = forums[:50]
+    forums = forums[:10]
 
   forum_map, note_map = get_forum_map(forums, or_client)
   text_rows = []
