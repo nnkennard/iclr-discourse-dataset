@@ -65,7 +65,6 @@ CREATE_TEXT_TABLE = """ CREATE TABLE IF NOT EXISTS {0} (
     timestamp text NOT NULL,
     author text NOT NULL,
     author_type text NOT NULL,
-    or_text_type text NOT NULL,
     comment_type text NOT NULL,
 
     orig_id text NOT NULL,
@@ -82,13 +81,13 @@ FIELDS = """forum_id split parent_sid sid
   token_idx token"""
 COMMA_SEP_FIELDS = ", ".join(FIELDS.split())
 #CommentRow = recordtype("CommentRow", FIELDS, default=None)
-#TextRow = recordtype("TextRow", FIELDS.split(), default=None)
+TextRow = recordtype("TextRow", FIELDS.split(), default=None)
 
 
 def insert_into_pairs(conn, table, pair_rows):
   """Insert a record into the datasets table (train-test split)."""
   cmd = ("INSERT INTO {0} (review_sid, rebuttal_sid, split, title, "
-          "review_author) VALUES(?, ?, ?);").format(table)
+          "review_author) VALUES(?, ?, ?, ?, ?);").format(table)
   cur = conn.cursor()
   for row in pair_rows:
     cur.execute(cmd, row)

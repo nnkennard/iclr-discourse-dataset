@@ -167,10 +167,15 @@ def get_descendant_path(sid, ordered_notes):
 
        
 
-def build_sid_map(note_map):    
+def build_sid_map(note_map, forum_pairs):    
   sid_map = {}
   ordered_notes = sorted(note_map.values(), key=lambda x:x.tcdate)
   seen_notes = set()
+
+  relevant_sids = set()
+  for pair in forum_pairs:
+    relevant_sids.add(pair.review)
+    relevant_sids.add(pair.rebuttal)
 
   for i, note in enumerate(ordered_notes):
     if note.id in seen_notes:
@@ -183,9 +188,10 @@ def build_sid_map(note_map):
     if siblings and descendants: # This is too complicated to detangle
       continue
     else:
-      notes = [note.id] + siblings + descendants
-      seen_notes.update(notes)
-      sid_map[note.id] = notes
+      if note.id in relevant_sids:
+          notes = [note.id] + siblings + descendants
+          seen_notes.update(notes)
+          sid_map[note.id] = notes
 
   return sid_map
 
@@ -208,35 +214,49 @@ def get_review_rebuttal_pairs(forums, or_client):
             for note in or_client.get_notes(forum=forum_id)}
 
     forum_pairs = get_forum_pairs(forum_id, note_map)
-    forum_sid_map = build_sid_map(note_map)
-    print("Forum pairs: ", forum_pairs)
-    print("SID map keys:", forum_sid_map.keys())
-    sid_pairs = [pair for pair in forum_pairs if
-            set(pair).issubset(forum_sid_map.keys())]
-    print("SID pairs:", sid_pairs)
-    print()
+    forum_sid_map = build_sid_map(note_map, forum_pairs)
+
 
     assert (len(sid_pairs) == len(set(sid_pairs))
             == len(set(x.review for x in sid_pairs))
             == len(set(x.rebuttal for x in sid_pairs)))
 
-    sid_map.update(forum_sid_map)
+    sid_map[forum_id] = forum_sid_map
     review_rebuttal_pairs += sid_pairs
   
   return sid_map, review_rebuttal_pairs
 
+
+def get_info(note):
+  """Gets relevant note metadata.
+    Args:
+      note_id: the note id from the openreview.Note object
+      note_map: a map from note ids to relevant openreview.Note objects
+    Returns:
+      The text_type, text and authors of the note.
+  """
+  if note.replyto is None:
+    return "root", "", flatten_signature(note)
+  else:
+    for text_type in ["review", "comment", "withdrawal confirmation",
+            "metareview"]:
+      if text_type in note.content:
+        return text_type, note.content[text_type], flatten_signature(note)
+    assert False
+
     
-def get_text_from_note_list(note_list, corenlp_client):
+def get_text_from_note_list(note_list, supernote_as_dict, corenlp_client):
   chunk_offset = 0
-  for subnote in subnotes:
-    text_type, text, _, subnote_author = get_info(subnote, note_map)
-    assert subnote_author == supernote_author
+  text_rows = []
+
+  for subnote in note_list:
+    text_type, text, subnote_author = get_info(subnote)
     chunks = get_tokenized_chunks(corenlp_client, text)
 
     for chunk_idx, chunk in enumerate(chunks):
       for sentence_idx, sentence in enumerate(chunk):
         for token_idx, token in enumerate(sentence):
-          new_row = ordb.CommentRow(**supernote_as_dict)
+          new_row = ordb.TextRow(**supernote_as_dict)
           new_row.chunk_idx = chunk_idx + chunk_offset
           new_row.sentence_idx = sentence_idx
           new_row.token_idx = token_idx
@@ -246,6 +266,23 @@ def get_text_from_note_list(note_list, corenlp_client):
 
     chunk_offset += len(chunks)
 
+  return text_rows
+
+def get_parent_sid(parent_id, sid_map, forum_id):
+  if parent_id in sid_map or parent_id == forum_id:
+    return parent_id
+  else:
+    for k, v in sid_map.items():
+      if parent_id in v:
+        return k
+  assert False
+
+def get_comment_type(sid, reviews, rebuttals):  
+  if sid in reviews:
+    return "review"
+  else:
+    assert sid in rebuttals
+    return "rebuttal"
 
 def build_dataset(forum_ids, or_client, corenlp_client, conn, conference,
     set_split, table, debug):
@@ -269,18 +306,38 @@ def build_dataset(forum_ids, or_client, corenlp_client, conn, conference,
     forums = forums[:10]
 
   sid_map, review_rebuttal_pairs = get_review_rebuttal_pairs(forums, or_client)
+
+  reviews = [pair.review for pair in review_rebuttal_pairs]
+  rebuttals = [pair.rebuttal for pair in review_rebuttal_pairs]
   
   for pair in review_rebuttal_pairs:
     forum_notes = or_client.get_notes(forum=pair.forum)
     assert forum_notes[0].id == pair.forum
     forum_title = forum_notes[0].content["title"]
-    review_author, = [flatten(note.signature)
+    review_author, = [flatten_signature(note)
                       for note in forum_notes
                       if note.id == pair.review]
-    print(review_author)
-    dsds
+    #ordb.insert_into_pairs(conn, table, (pair.review, pair.rebuttal, set_split,
+    #    forum_title, review_author) )
 
 
   # Tokenize all relevant comments
+  for forum, forum_sid_map in sid_map.items():
+    note_map = {note.id: note for note in or_client.get_notes(forum=forum)}
+    for sid, subnotes in forum_sid_map.items():
+      if sid == forum:
+        dsds
+      supernote = note_map[sid]
+      supernote_author = flatten_signature(supernote)
+      author_type = shorten_author(supernote_author)
+      parent_sid = get_parent_sid(supernote.replyto, sid_map, forum)
+      review_or_rebuttal = get_comment_type(sid, reviews=reviews, rebuttals=rebuttals)
+      supernote_as_dict =  ordb.TextRow(
+          forum, set_split, parent_sid, sid, 
+          note_map[sid].tcdate, supernote_author, author_type,
+          review_or_rebuttal)._asdict()
+      text = get_text_from_note_list(
+              [note_map[subnote] for subnote in subnotes], supernote_as_dict, corenlp_client)
+      print(text)
 
 
