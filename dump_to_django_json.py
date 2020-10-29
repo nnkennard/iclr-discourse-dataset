@@ -37,7 +37,8 @@ def main():
     for row in tqdm.tqdm(rows):
       output_obj["meta"].append({"review":row["review_sid"],
                                  "rebuttal":row["rebuttal_sid"],
-                                 "title": row["title"]})
+                                 "title": row["title"],
+                                 "review_author": row["review_author"]})
       output_obj["tokens"] += get_token_rows(cur, row["review_sid"])
       output_obj["tokens"] += get_token_rows(cur, row["rebuttal_sid"])
 
