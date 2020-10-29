@@ -127,9 +127,9 @@ def get_tokenized_chunks(corenlp_client, text):
       A list of chunks in which a chunk is a list of sentences and a sentence is
       a list of tokens.
   """
-  chunks = text.split("\n")
+  chunks = [chunk if chunk else "<br>" for chunk in text.split("\n") ]
   return [get_tokens_from_tokenized(corenlp_client.annotate(chunk))
-      for chunk in chunks]
+          for chunk in chunks]
 
 
 def get_forum_pairs(forum_id, note_map):
