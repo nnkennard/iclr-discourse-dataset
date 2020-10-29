@@ -214,8 +214,17 @@ def get_review_rebuttal_pairs(forums, or_client):
             for note in or_client.get_notes(forum=forum_id)}
 
     forum_pairs = get_forum_pairs(forum_id, note_map)
+    # Sometimes these aren't supernotes e.g. when there are two candidate
+    # supernotes and they have to be ordered by timestamp.
     forum_sid_map = build_sid_map(note_map, forum_pairs)
+    sid_pairs = [pair 
+                 for pair in forum_pairs
+                 if (pair.rebuttal in forum_sid_map
+                     and pair.review in forum_sid_map)]
 
+    for pair in sid_pairs:
+      assert pair.review in forum_sid_map
+      assert pair.rebuttal in forum_sid_map
 
     assert (len(sid_pairs) == len(set(sid_pairs))
             == len(set(x.review for x in sid_pairs))
@@ -261,7 +270,7 @@ def get_text_from_note_list(note_list, supernote_as_dict, corenlp_client):
           new_row.sentence_idx = sentence_idx
           new_row.token_idx = token_idx
           new_row.token = token
-          new_row.original_id = subnote
+          new_row.orig_id = subnote.id
           text_rows.append(new_row)
 
     chunk_offset += len(chunks)
@@ -312,7 +321,7 @@ def build_dataset(forum_ids, or_client, corenlp_client, conn, conference,
   
   for pair in review_rebuttal_pairs:
     forum_notes = or_client.get_notes(forum=pair.forum)
-    assert forum_notes[0].id == pair.forum
+    assert sorted(forum_notes, key=lambda x:x.tcdate)[0].id == pair.forum
     forum_title = forum_notes[0].content["title"]
     review_author, = [flatten_signature(note)
                       for note in forum_notes
@@ -338,6 +347,4 @@ def build_dataset(forum_ids, or_client, corenlp_client, conn, conference,
           review_or_rebuttal)._asdict()
       text = get_text_from_note_list(
               [note_map[subnote] for subnote in subnotes], supernote_as_dict, corenlp_client)
-      print(text)
-
 

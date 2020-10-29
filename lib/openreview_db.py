@@ -15,6 +15,7 @@ def create_connection(db_file):
   except Error as e:
     print(e)
 
+
 def dict_factory(cursor, row):
   d = {}
   for idx, col in enumerate(cursor.description):
@@ -22,12 +23,20 @@ def dict_factory(cursor, row):
   return d
 
 
-
 class TextTables(object):
   UNSTRUCTURED = "unstructured"
   TRAIN_DEV = "traindev"
   TRUE_TEST = "truetest"
   ALL = [UNSTRUCTURED, TRAIN_DEV, TRUE_TEST]
+
+
+PAIR_FIELDS = "review_sid rebuttal_sid split text title review_author".split()
+PairRow = recordtype("TextRow", PAIR_FIELDS, default=None)
+
+TEXT_FIELDS = ("forum_id split parent_sid sid timestamp author "
+                     "author_type comment_type orig_id chunk_idx sentence_idx "
+                     "token_idx token").split() # These are all "text NOT NULL"
+TextRow = recordtype("TextRow", TEXT_FIELDS, default=None)
 
 
 def create_tables(conn):
@@ -39,69 +48,31 @@ def create_tables(conn):
   try:
     c = conn.cursor()
     for table_name in TextTables.ALL:
-      c.execute(CREATE_TEXT_TABLE.format(table_name))
-      c.execute(CREATE_PAIR_TABLE.format(table_name + "_pairs"))
+
+      create_text_table_cmd =  "CREATE TABLE IF NOT EXISTS {0} ("
+      for field in TEXT_FIELDS:
+        create_text_table_cmd +=  field + " text NOT NULL, "
+      create_text_table_cmd += ("PRIMARY KEY (orig_id, "
+                      "chunk_idx, sentence_idx, token_idx)); ")
+      c.execute(create_text_table_cmd.format(table_name))
+
+      create_pair_table_cmd =  "CREATE TABLE IF NOT EXISTS {0} ("
+      for field in PAIR_FIELDS:
+        create_pair_table_cmd +=  field + " text NOT NULL, "
+      create_pair_table_cmd += ("PRIMARY KEY (review_sid, rebuttal_sid)); ")
+      c.execute(create_pair_table_cmd.format(table_name + "_pairs"))
+
     conn.commit()
   except Error as e:
     print(e)
 
 
-CREATE_PAIR_TABLE =  """ CREATE TABLE IF NOT EXISTS {0} (
-    review_sid text NOT NULL,
-    rebuttal_sid text NOT NULL,
-    split text NOT NULL,
-    title text NOT NULL,
-    review_author NOT NULL,
-    PRIMARY KEY (review_sid, rebuttal_sid)); """
-# No rebuttal author because rebuttal author should always be Authors.
 
 
-CREATE_TEXT_TABLE = """ CREATE TABLE IF NOT EXISTS {0} (
-    forum_id text NOT NULL,
-    split text NOT NULL,
-    parent_sid text NOT NULL,
-    sid text NOT NULL,
-
-    timestamp text NOT NULL,
-    author text NOT NULL,
-    author_type text NOT NULL,
-    comment_type text NOT NULL,
-
-    orig_id text NOT NULL,
-    chunk_idx integer NOT NULL,
-    sentence_idx integer NOT NULL,
-    token_idx integer NOT NULL,
-    token text NOT NULL,
-
-    PRIMARY KEY (original_id, chunk_idx, sentence_idx, token_idx)); """
-
-FIELDS = """forum_id split parent_sid sid
-  timestamp author author_type or_text_type
-  comment_type orig_id chunk_idx sentence_idx
-  token_idx token"""
-COMMA_SEP_FIELDS = ", ".join(FIELDS.split())
-#CommentRow = recordtype("CommentRow", FIELDS, default=None)
-TextRow = recordtype("TextRow", FIELDS.split(), default=None)
-
-
-def insert_into_pairs(conn, table, pair_rows):
-  """Insert a record into the datasets table (train-test split)."""
-  cmd = ("INSERT INTO {0} (review_sid, rebuttal_sid, split, title, "
-          "review_author) VALUES(?, ?, ?, ?, ?);").format(table)
-  cur = conn.cursor()
-  for row in pair_rows:
-    cur.execute(cmd, row)
-  conn.commit()
-
-
-def insert_into_comments(conn, table, forum_rows):
-  """Insert a record into the datasets table (train-test split)."""
-  cmd = ''' INSERT INTO
-              {0}({1})
-              VALUES(?, ?, ?, ?,
-                     ?, ?, ?, ?,
-                     ?, ?, ?, ?,
-                     ?, ?); '''.format(table, COMMA_SEP_FIELDS)
+def insert_into_table(conn, table_name, fields, rows):
+  cmd = "".join(["INSERT INTO {0}({1}) VALUES (",
+                 ",".join(["?"] * len(TEXT_FIELDS)),
+                ");"]).format(table_name, ",".join(fields))
   cur = conn.cursor()
   for row in forum_rows:
     cur.execute(cmd, tuple(row))
