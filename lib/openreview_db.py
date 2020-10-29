@@ -69,8 +69,11 @@ def create_tables(conn):
 
 def insert_into_table(conn, table_name, fields, rows):
   cmd = "".join(["INSERT INTO {0}({1}) VALUES (",
-                 ",".join(["?"] * len(TEXT_FIELDS)),
+                 ",".join(["?"] * len(fields)),
                 ");"]).format(table_name, ",".join(fields))
+  print(table_name)
+  print(fields)
+  print(rows[0])
   cur = conn.cursor()
   for row in rows:
     cur.execute(cmd, tuple(row))

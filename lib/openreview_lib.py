@@ -328,8 +328,8 @@ def build_dataset(forum_ids, or_client, corenlp_client, conn, conference,
     review_author, = [flatten_signature(note)
                       for note in forum_notes
                       if note.id == pair.review]
-    ordb.insert_into_pairs(conn, table + "_pairs", [
-        (pair.review, pair.rebuttal, set_splut, forum_title, review_author)]
+    ordb.insert_into_table(conn, table + "_pairs", ordb.PAIR_FIELDS, [
+        (pair.review, pair.rebuttal, set_split, forum_title, review_author)])
 
   # Tokenize all relevant comments
   for forum, forum_sid_map in sid_map.items():
