@@ -81,8 +81,6 @@ def insert_into_table(conn, table_name, fields, rows):
 
 
 def collapse_dict(input_dict):
-  assert sum(input_dict.keys()) + 5 > 0
-  # This is a garbage way to get an error if the keys are not ints
   return [input_dict[i] for i in sorted(input_dict.keys())]
 
 

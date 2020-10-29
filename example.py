@@ -29,8 +29,8 @@ def main():
     cur.execute(get_rows_command, ("train",))
     rows = cur.fetchall()
     for row in rows:
-      cur.execute("SELECT * FROM traindev WHERE comment_supernote=?",
-          (row["review_supernote"],))
+      cur.execute("SELECT * FROM traindev WHERE sid=?",
+          (row["review_sid"],))
       crunched_rows = ordb.crunch_text_rows(cur.fetchall())
 
       for note_id, chunks in crunched_rows.items():
