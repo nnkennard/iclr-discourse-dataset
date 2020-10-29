@@ -319,6 +319,8 @@ def build_dataset(forum_ids, or_client, corenlp_client, conn, conference,
   reviews = [pair.review for pair in review_rebuttal_pairs]
   rebuttals = [pair.rebuttal for pair in review_rebuttal_pairs]
   
+  pair_rows = []    
+
   for pair in review_rebuttal_pairs:
     forum_notes = or_client.get_notes(forum=pair.forum)
     assert sorted(forum_notes, key=lambda x:x.tcdate)[0].id == pair.forum
@@ -326,16 +328,15 @@ def build_dataset(forum_ids, or_client, corenlp_client, conn, conference,
     review_author, = [flatten_signature(note)
                       for note in forum_notes
                       if note.id == pair.review]
-    #ordb.insert_into_pairs(conn, table, (pair.review, pair.rebuttal, set_split,
-    #    forum_title, review_author) )
-
+    ordb.insert_into_pairs(conn, table + "_pairs", [
+        (pair.review, pair.rebuttal, set_splut, forum_title, review_author)]
 
   # Tokenize all relevant comments
   for forum, forum_sid_map in sid_map.items():
     note_map = {note.id: note for note in or_client.get_notes(forum=forum)}
     for sid, subnotes in forum_sid_map.items():
       if sid == forum:
-        dsds
+        assert False # We should only have reviews and rebuttals here, no roots
       supernote = note_map[sid]
       supernote_author = flatten_signature(supernote)
       author_type = shorten_author(supernote_author)
@@ -346,5 +347,7 @@ def build_dataset(forum_ids, or_client, corenlp_client, conn, conference,
           note_map[sid].tcdate, supernote_author, author_type,
           review_or_rebuttal)._asdict()
       text = get_text_from_note_list(
-              [note_map[subnote] for subnote in subnotes], supernote_as_dict, corenlp_client)
+              [note_map[subnote] for subnote in subnotes], 
+              supernote_as_dict, corenlp_client)
+      ordb.insert_into_table(conn, table, ordb.TEXT_FIELDS, text)
 

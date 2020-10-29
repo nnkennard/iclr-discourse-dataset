@@ -30,7 +30,7 @@ class TextTables(object):
   ALL = [UNSTRUCTURED, TRAIN_DEV, TRUE_TEST]
 
 
-PAIR_FIELDS = "review_sid rebuttal_sid split text title review_author".split()
+PAIR_FIELDS = "review_sid rebuttal_sid split title review_author".split()
 PairRow = recordtype("TextRow", PAIR_FIELDS, default=None)
 
 TEXT_FIELDS = ("forum_id split parent_sid sid timestamp author "
@@ -67,14 +67,12 @@ def create_tables(conn):
     print(e)
 
 
-
-
 def insert_into_table(conn, table_name, fields, rows):
   cmd = "".join(["INSERT INTO {0}({1}) VALUES (",
                  ",".join(["?"] * len(TEXT_FIELDS)),
                 ");"]).format(table_name, ",".join(fields))
   cur = conn.cursor()
-  for row in forum_rows:
+  for row in rows:
     cur.execute(cmd, tuple(row))
   conn.commit()
 
@@ -90,8 +88,9 @@ def crunch_text_rows(rows):
 
   TODO(nnk): This, but in a non-horrible way
   """
-  texts_builder = collections.defaultdict(lambda : collections.defaultdict(lambda:
-    collections.defaultdict(list)))
+  texts_builder = collections.defaultdict(
+          lambda : collections.defaultdict(lambda:
+                   collections.defaultdict(list)))
 
   for row in rows:
     supernote, chunk, sentence, token = (row["sid"],
