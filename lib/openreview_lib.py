@@ -1,6 +1,8 @@
 import collections
 import json
 import openreview
+import os
+import pickle
 
 from tqdm import tqdm
 import lib.openreview_db as ordb
@@ -78,11 +80,11 @@ def get_datasets(dataset_file, corenlp_client, conn, debug=False):
 
     if subset == ordb.TextTables.TRAIN_DEV:
       for set_split, set_forum_ids in forum_ids.items():
-        build_dataset(set_forum_ids, guest_client, corenlp_client, conn,
+        build_dataset(subset, set_forum_ids, guest_client, corenlp_client, conn,
                       conference, set_split, subset, debug)
     else:
       fake_split = FAKE_SPLIT_MAP[subset]
-      build_dataset(forum_ids, guest_client, corenlp_client, conn,
+      build_dataset(subset, forum_ids, guest_client, corenlp_client, conn,
                     conference, fake_split, subset, debug)
 
 
@@ -196,7 +198,7 @@ def build_sid_map(note_map, forum_pairs):
   return sid_map
 
 
-def get_review_rebuttal_pairs(forums, or_client):
+def get_review_rebuttal_pairs(forums, or_client, conn, table, set_split):
   """From a list of forums, extract review and rebuttal pairs.
   
     Args:
@@ -204,12 +206,12 @@ def get_review_rebuttal_pairs(forums, or_client):
 
     Returns:
       sid_map: A map from sids to a list of comments they encompass
-      review_rebuttal_pairs: A list of pairs of sids (supernote ids)
 
   """
   review_rebuttal_pairs = []
   sid_map = {}
-  for forum_id in forums:
+  print("Getting forums")
+  for forum_id in tqdm(forums):
     note_map = {note.id: note
             for note in or_client.get_notes(forum=forum_id)}
 
@@ -232,7 +234,17 @@ def get_review_rebuttal_pairs(forums, or_client):
 
     sid_map[forum_id] = forum_sid_map
     review_rebuttal_pairs += sid_pairs
-  
+
+  for pair in tqdm(review_rebuttal_pairs):
+    forum_notes = or_client.get_notes(forum=pair.forum)
+    assert sorted(forum_notes, key=lambda x:x.tcdate)[0].id == pair.forum
+    forum_title = forum_notes[0].content["title"]
+    review_author, = [flatten_signature(note)
+                      for note in forum_notes
+                      if note.id == pair.review]
+    ordb.insert_into_table(conn, table + "_pairs", ordb.PAIR_FIELDS, [
+        (pair.review, pair.rebuttal, set_split, forum_title, review_author)])
+
   return sid_map, review_rebuttal_pairs
 
 
@@ -281,29 +293,77 @@ def get_parent_sid(parent_id, sid_map, forum_id):
   if parent_id in sid_map or parent_id == forum_id:
     return parent_id
   else:
-    for k, v in sid_map.items():
+    for k, v in sid_map[forum_id].items():
       if parent_id in v:
         return k
   assert False
 
-def get_comment_type(sid, reviews, rebuttals):  
-  if sid in reviews:
-    return "review"
-  else:
-    assert sid in rebuttals
-    return "rebuttal"
+def get_comment_type(sid, review_rebuttal_pairs):  
+  for pair in review_rebuttal_pairs:
+    if sid == pair.review:
+      return "review"
+    elif sid == pair.rebuttal:
+      return "rebuttal"
+  assert False
+  
 
-def build_dataset(forum_ids, or_client, corenlp_client, conn, conference,
+def get_or_compute(path, computation):
+  if os.path.exists(path):
+    print("Loading from pickle: ", path)
+    with open(path, 'rb') as f:
+      return pickle.load(f)
+  else:
+    print("Computing and dumping to pickle")
+    result = computation()
+    with open(path, 'wb') as f:
+      pickle.dump(result, f)
+    return result
+
+def insert_text_rows(sid_map, review_rebuttal_pairs,
+    or_client, corenlp_client, conn, table, set_split):
+  #reviews = [pair.review for pair in review_rebuttal_pairs]
+  #rebuttals = [pair.rebuttal for pair in review_rebuttal_pairs]
+  relevant_sids = sum([[x.review, x.rebuttal] for x in review_rebuttal_pairs], [])
+  rows = []
+  for forum, forum_sid_map in tqdm(sid_map.items()):
+    note_map = {note.id: note for note in or_client.get_notes(forum=forum)}
+    for sid, subnotes in forum_sid_map.items():
+      if sid == forum:
+        assert False # We should only have reviews and rebuttals here, no roots
+      if sid not in relevant_sids:
+        print("Skipping: ", sid, " from forum ", forum)
+        continue
+      supernote = note_map[sid]
+      supernote_author = flatten_signature(supernote)
+      author_type = shorten_author(supernote_author)
+      parent_sid = get_parent_sid(supernote.replyto, sid_map, forum)
+      review_or_rebuttal = get_comment_type(sid, review_rebuttal_pairs)
+      supernote_as_dict =  ordb.TextRow(
+          forum, set_split, parent_sid, sid, 
+          note_map[sid].tcdate, supernote_author, author_type,
+          review_or_rebuttal)._asdict()
+      text = get_text_from_note_list(
+              [note_map[subnote] for subnote in subnotes], 
+              supernote_as_dict, corenlp_client)
+      ordb.insert_into_table(conn, table, ordb.TEXT_FIELDS, text)
+
+def get_temp_path(temp_file_type, dataset, split, temp_path="/iesl/canvas/nnayak/temp/or_ir/"):
+  return temp_path + "_".join([dataset, split, temp_file_type]) + ".pkl"
+
+
+def build_dataset(dataset_name, forum_ids, or_client, corenlp_client, conn, conference,
     set_split, table, debug):
   """Initializes and dumps to sqlite3 database.
 
   Args:
+    dataset_name: name of the conference
     forum_ids: list of forum ids (top comment ids) in the dataset
     or_client: openreview client
     corenlp_client: stanford-corenlp client for tokenization
     conn: sqlite3 connection
     conference: conference name
     set_split: train/dev/test
+    table: what is this table and where did it come from? TODO: find out
     debug: if True, truncate example list to 10 examples
   """
   all_conference_notes = openreview.tools.iterget_notes(
@@ -314,40 +374,13 @@ def build_dataset(forum_ids, or_client, corenlp_client, conn, conference,
   if debug:
     forums = forums[:10]
 
-  sid_map, review_rebuttal_pairs = get_review_rebuttal_pairs(forums, or_client)
-
-  reviews = [pair.review for pair in review_rebuttal_pairs]
-  rebuttals = [pair.rebuttal for pair in review_rebuttal_pairs]
+  pair_pickle_file = get_temp_path("pairs", dataset_name, set_split)
+  sid_map, review_rebuttal_pairs = get_or_compute(pair_pickle_file,
+      lambda: get_review_rebuttal_pairs(forums, or_client, conn, table,
+        set_split))
   
-  pair_rows = []    
-
-  for pair in review_rebuttal_pairs:
-    forum_notes = or_client.get_notes(forum=pair.forum)
-    assert sorted(forum_notes, key=lambda x:x.tcdate)[0].id == pair.forum
-    forum_title = forum_notes[0].content["title"]
-    review_author, = [flatten_signature(note)
-                      for note in forum_notes
-                      if note.id == pair.review]
-    ordb.insert_into_table(conn, table + "_pairs", ordb.PAIR_FIELDS, [
-        (pair.review, pair.rebuttal, set_split, forum_title, review_author)])
-
-  # Tokenize all relevant comments
-  for forum, forum_sid_map in sid_map.items():
-    note_map = {note.id: note for note in or_client.get_notes(forum=forum)}
-    for sid, subnotes in forum_sid_map.items():
-      if sid == forum:
-        assert False # We should only have reviews and rebuttals here, no roots
-      supernote = note_map[sid]
-      supernote_author = flatten_signature(supernote)
-      author_type = shorten_author(supernote_author)
-      parent_sid = get_parent_sid(supernote.replyto, sid_map, forum)
-      review_or_rebuttal = get_comment_type(sid, reviews=reviews, rebuttals=rebuttals)
-      supernote_as_dict =  ordb.TextRow(
-          forum, set_split, parent_sid, sid, 
-          note_map[sid].tcdate, supernote_author, author_type,
-          review_or_rebuttal)._asdict()
-      text = get_text_from_note_list(
-              [note_map[subnote] for subnote in subnotes], 
-              supernote_as_dict, corenlp_client)
-      ordb.insert_into_table(conn, table, ordb.TEXT_FIELDS, text)
-
+  text_pickle_file = get_temp_path("text", dataset_name, set_split)
+  get_or_compute(text_pickle_file,
+      lambda: insert_text_rows(sid_map, review_rebuttal_pairs, or_client,
+        corenlp_client, conn, table, set_split))
+  

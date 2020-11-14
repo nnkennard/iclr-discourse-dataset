@@ -1,5 +1,7 @@
 import argparse
 import corenlp
+import glob
+import os
 import sys
 
 import lib.openreview_db as ordb
@@ -15,12 +17,21 @@ parser.add_argument('-i', '--inputfile',
     type=str, help='path to database file')
 parser.add_argument('-s', '--debug', action="store_true",
     help='if True, truncate the example list')
+parser.add_argument('-c', '--clean', action="store_true",
+    help='if True, delete existing database and intermediate data structures')
 
 
 def main():
 
   args = parser.parse_args()
   conn = ordb.create_connection(args.dbfile)
+  if args.clean:
+    for filename in glob.glob("db/*") + glob.glob("/iesl/canvas/nnayak/temp/or_ir/*"):
+      try:
+        print("Deleting ", filename)
+        os.remove(filename)
+      except:
+        print("Alas, an error")
   if conn is not None:
     ordb.create_tables(conn)
     with corenlp.CoreNLPClient(
