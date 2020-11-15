@@ -95,11 +95,11 @@ def crunch_text_rows(rows):
   for row in rows:
     supernote, chunk, sentence, token = (row["sid"],
         row["chunk_idx"], row["sentence_idx"], row["token"])
-    texts_builder[supernote][chunk][sentence].append(token)
+    texts_builder[supernote][int(chunk)][int(sentence)].append(token)
 
   texts = {}
   for supernote, chunk_dict in texts_builder.items():
     texts[supernote] = [collapse_dict(sentence) 
         for sentence in collapse_dict(chunk_dict)]
-
+  
   return texts

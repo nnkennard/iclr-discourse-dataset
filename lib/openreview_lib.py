@@ -5,7 +5,7 @@ import os
 import pickle
 
 from tqdm import tqdm
-import lib.openreview_db as ordb
+import openreview_db as ordb
 
 
 CORENLP_ANNOTATORS = "ssplit tokenize"
