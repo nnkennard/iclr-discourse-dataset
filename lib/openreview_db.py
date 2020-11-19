@@ -4,7 +4,6 @@ from sqlite3 import Error
 
 from recordtype import recordtype
 
-
 def create_connection(db_file):
   """ create a database connection to a SQLite database """
   conn = None
