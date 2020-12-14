@@ -15,6 +15,14 @@ def create_connection(db_file):
     print(e)
 
 
+def get_cursor(db_file):
+  create_connection(db_file)
+  if conn is None:
+    print("Error")
+    return
+  return conn.cursor()
+
+
 def dict_factory(cursor, row):
   d = {}
   for idx, col in enumerate(cursor.description):

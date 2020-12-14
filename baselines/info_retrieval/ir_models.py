@@ -62,7 +62,8 @@ class BertVSM(IRModelInterface):
     tokens = segments_to_tokens(segments, segment_type)
     vectors = []
     for token_segment in tokens:
-      input_tensors = torch.tensor(self.tokenizer.encode(token_segment)).unsqueeze(0)
+      input_tensors = torch.tensor(
+          self.tokenizer.encode(token_segment)).unsqueeze(0)
       vectors.append(self.model(input_tensors)[0].mean(1))
     return torch.cat(vectors)
 
