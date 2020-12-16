@@ -2,10 +2,10 @@ import argparse
 import collections
 import json
 
+import utils
 import openreview_db as ordb
 
 from tqdm import tqdm
-
 
 
 parser = argparse.ArgumentParser(
@@ -17,23 +17,6 @@ parser.add_argument('-o', '--out_dir', default="datasets/",
 parser.add_argument('-n', '--numexamples', default=-1,
         type=int, help="Number of examples per dataset; -1 to include all")
 
-Dataset = collections.namedtuple("Dataset",
-  "dataset_name split discourse_unit examples".split())
-Example = collections.namedtuple("Example",
-  "review_sid rebuttal_sid review_text rebuttal_text labels")
-
-
-class DiscourseUnit(object):
-  sentence = "sentence"
-  chunk = "chunk"
-  ALL = [sentence, chunk]
-
-DATASET_NAMES = [
-    ("traindev", "train"),
-    ("traindev", "dev"),
-    ("traindev", "test"),
-    ("truetest", "test")
-    ]
 
 
 def get_pairs(cursor, dataset_name, split, numexamples):
@@ -50,29 +33,31 @@ def get_text(cursor, dataset_name, sid):
                 (sid,))
   chunks, = ordb.crunch_text_rows(rows).values()
   sentences = sum(chunks, [])
+  chunks = [sum(chunk, []) for chunk in chunks]
   return {
-      DiscourseUnit.chunk: chunks,
-      DiscourseUnit.sentence: sentences
+      utils.DiscourseUnit.chunk: chunks,
+      utils.DiscourseUnit.sentence: sentences
       }
 
 
 def get_datasets(cursor, dataset_name, split, numexamples):
+  print("Dataset name: ", dataset_name, "Split: ", split)
   numexamples = 10
 
   datasets = {
-      discourse_unit:Dataset(dataset_name, split, discourse_unit, []) for
-      discourse_unit in DiscourseUnit.ALL}
+      discourse_unit:utils.Dataset(dataset_name, split, discourse_unit, []) for
+      discourse_unit in utils.DiscourseUnit.ALL}
 
   pairs = get_pairs(cursor, dataset_name, split, numexamples)
-  for pair in pairs:
+  for pair in tqdm(pairs):
     review_sid = pair["review_sid"]
     rebuttal_sid = pair["rebuttal_sid"]
 
     review_text = get_text(cursor, dataset_name, review_sid)
     rebuttal_text = get_text(cursor, dataset_name, rebuttal_sid)
 
-    for discourse_unit in DiscourseUnit.ALL:
-      datasets[discourse_unit].examples.append(Example(
+    for discourse_unit in utils.DiscourseUnit.ALL:
+      datasets[discourse_unit].examples.append(utils.Example(
         review_sid=review_sid,
         rebuttal_sid=rebuttal_sid,
         review_text=review_text[discourse_unit],
@@ -82,23 +67,19 @@ def get_datasets(cursor, dataset_name, split, numexamples):
     
   return datasets
 
-# TODO: Move to utils
-def get_json(obj):
-  return json.loads(
-      json.dumps(obj, default=lambda o: getattr(o, '__dict__', str(o))))
-
 def main():
 
   args = parser.parse_args()
 
   cursor = ordb.get_cursor(args.dbfile)
 
-  for dataset_name, split in DATASET_NAMES:
+  for dataset_name, split in utils.DATASET_NAMES:
     datasets = get_datasets(cursor, dataset_name, split, args.numexamples)
-    for discourse_unit in DiscourseUnit.ALL:
-      with open(args.out_dir + "/" + "_".join([dataset_name, split,
-        discourse_unit]) + ".json", 'w') as f:
-        json.dump(get_json(datasets[discourse_unit]), f)
+    for discourse_unit in utils.DiscourseUnit.ALL:
+      filename = utils.get_dataset_filename(args.out_dir, dataset_name, split,
+          discourse_unit)
+      with open(filename, 'w') as f:
+        json.dump(utils.dump_dataset(datasets[discourse_unit]), f)
 
 
 if __name__ == "__main__":
