@@ -72,19 +72,28 @@ def get_pairs(numexamples, cursor):
 
 
 def rule_based_matcher(review_sid, rebuttal_sid, cursor, match_map):
-  print(match_map[review_sid])
-  relation_map = {i:[] for i in range(len(rebuttal_chunk))}
   cursor.execute("SELECT * FROM traindev WHERE sid=?", (review_sid,))
   review_chunks, = ordb.crunch_text_rows(cursor.fetchall()).values()
   for chunk in review_chunks:
     cursor.execute("SELECT * FROM traindev WHERE sid=?",
         (rebuttal_sid,))
   rebuttal_chunks, = ordb.crunch_text_rows(cursor.fetchall()).values()
+  relation_map = {i:[] for i in range(len(rebuttal_chunks))}
+  for i, match in enumerate(match_map[review_sid]):
+    chunk_tokens = sum(review_chunks[match.review_location.chunk], [])
+    ratio = len(match.tokens) / len(chunk_tokens)
+    print("\t".join([
+      str(ratio),
+      review_sid, str(match.review_location.chunk),
+      rebuttal_sid, str(match.rebuttal_location.chunk),
+      " ".join(match.tokens), " ".join(chunk_tokens)
+      ]))
+
 
 
 def main():
   match_map = get_match_map(sys.argv[1])
-  numexamples = 1000
+  numexamples = 100
   cursor = ordb.get_cursor("../../db/or.db")
   rows = get_pairs(numexamples, cursor)
 
@@ -93,16 +102,7 @@ def main():
     review_sid = row["review_sid"]
     print(review_sid)
     rebuttal_sid = row["rebuttal_sid"]
-    rule_based_matcher(review_sid, rebuttal_sid, cur, match_map)
+    rule_based_matcher(review_sid, rebuttal_sid, cursor, match_map)
 
-
-    find_prefixes(rebuttal_chunks)
-
-    matches = match_map[review_sid]
-    
-
-     page_str = "" + html_dump.START
-  page_str += html_dump.END
- 
 if __name__ == "__main__":
   main()
