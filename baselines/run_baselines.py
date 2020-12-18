@@ -25,10 +25,10 @@ parser.add_argument('-n', '--numexamples', default=-1,
 
 
 MODEL_MAP = {
-  "tfidf": models.TfIdfModel,
-  "sbert": models.SentenceBERTModel,
-  #"roberta": models.RobertaModel,
-  "bm25": models.BMModel,
+  #"tfidf": models.TfIdfModel,
+  #"sbert": models.SentenceBERTModel,
+  "roberta": models.RobertaModel,
+  #"bm25": models.BMModel,
     }
 
 def load_dataset_splits(data_dir, discourse_unit):
@@ -52,25 +52,6 @@ def main():
       predictions = model.predict()
       print(predictions)
 
-  exit()
-
-  from transformers import RobertaTokenizer, RobertaForQuestionAnswering
-  import torch
-
-  tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-  model = RobertaForQuestionAnswering.from_pretrained('roberta-base')
-
-  question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-  inputs = tokenizer(question, text, return_tensors='pt')
-  start_positions = torch.tensor([1])
-  end_positions = torch.tensor([3])
-
-  outputs = model(**inputs, start_positions=start_positions,
-      end_positions=end_positions)
-  print(outputs)
-  loss = outputs.loss
-  start_scores = outputs.start_logits
-  end_scores = outputs.end_logits
 
 
 if __name__ == "__main__":

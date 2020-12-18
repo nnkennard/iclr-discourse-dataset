@@ -10,7 +10,7 @@ from gensim import similarities
 from gensim.models import TfidfModel
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
-from transformers import RobertaTokenizer, RobertaModel
+from transformers import AutoTokenizer, RobertaForQuestionAnswering
 
 
 class Model(object):
@@ -90,22 +90,45 @@ class RobertaModel(Model):
   def __init__(self, datasets):
     self.test_dataset = datasets["train"]
     
-    self.tokenizer = RobertaTokenizer.from_pretrained('roberta-large')
-    self.model = RobertaModel.from_pretrained('roberta-large')
+    self.tokenizer = AutoTokenizer.from_pretrained('roberta-base')
+    self.model = RobertaForQuestionAnswering.from_pretrained('roberta-base')
 
 
   def predict(self):
-    predictions = {}
+    predictions = collections.defaultdict(list)
     for review_sid, example in self.test_dataset.items():
-      to_encode = [" ".join(tokens) for tokens in example["review_text"]]
-      review_embedding_matrix = np.stack([self.model.encode(sentence)
-                                          for sentence in to_encode])
-      labels = []
-      for rebuttal_sentence in example["rebuttal_text"]:
-        embedding = self.model.encode(" ".join(rebuttal_sentence))
-        labels.append(np.argmax(np.dot(review_embedding_matrix, embedding)))
-      predictions[review_sid] = labels
+      text = " ".join(sum(example["review_text"], []))[:512]
+      for i, rebuttal_chunk in enumerate(example["rebuttal_text"]):
+        question = " ".join(rebuttal_chunk)
+        inputs = self.tokenizer(question, text, return_tensors='pt', 
+                return_offsets_mapping=True)
+        offset_mapping = inputs["offset_mapping"]
+        del inputs["offset_mapping"]
+        start_positions = torch.tensor([1])
+        end_positions = torch.tensor([3])
 
+        outputs = self.model(**inputs, start_positions=start_positions,
+            end_positions=end_positions)
+
+        loss = outputs.loss
+        start_scores = outputs.start_logits
+        predictions[review_sid].append([self._get_predicted_chunk(
+          example["review_text"], start_scores, offset_mapping)])
+    return predictions
+
+
+  def _get_predicted_chunk(self, chunks, start_scores, offset_mapping):
+    top_logit = torch.argmax(start_scores)
+    start_char, end_char = offset_mapping[0][top_logit]
+    char_counter = 0
+    for i, chunk in enumerate(chunks):
+      text = " ".join(chunk)
+      if start_char < char_counter + len(text):
+        return i
+      char_counter += len(text)
+    assert False
+        
+    
     return predictions
 
 
