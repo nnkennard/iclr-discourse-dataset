@@ -1,19 +1,17 @@
 import collections
 import gensim
+import gensim.downloader as api
+import numpy as np
 import torch
-from rank_bm25 import BM25Okapi
-
 import utils
 
-import gensim.downloader as api
+from gensim.corpora import Dictionary
 from gensim import similarities
 from gensim.models import TfidfModel
-from gensim.corpora import Dictionary
-import numpy as np
-
+from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
-
 from transformers import RobertaTokenizer, RobertaModel
+
 
 class Model(object):
   def __init__(self):

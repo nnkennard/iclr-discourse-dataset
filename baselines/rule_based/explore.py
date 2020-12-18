@@ -86,7 +86,7 @@ def main():
     matches += detect_subsequence_matches(review_chunks, rebuttal_chunks,
         review_sid, rebuttal_sid)
 
-  with open("out1.json", 'w') as f:
+  with open("out.json", 'w') as f:
     json.dump([get_json(x) for x in matches], f)
 
 
