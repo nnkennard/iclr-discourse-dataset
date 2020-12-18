@@ -1,5 +1,6 @@
 import collections
 import json
+import math
 
 class DiscourseUnit(object):
   sentence = "sentence"
@@ -29,3 +30,24 @@ def dump_dataset(dataset):
       dataset.discourse_unit,
       [example._asdict() for example in dataset.examples])
   return dataset_2._asdict()
+
+
+def sparse_cosine_denominator(vec):
+  return math.sqrt(sum(math.pow(x, 2) for x in vec.values()))
+
+def sparse_cosine(vec1, vec2):
+  dvec1 = dict(vec1)
+  dvec2 = dict(vec2)
+
+  if not dvec1.keys() or not dvec2.keys():
+    return 0.0
+
+  num_acc = 0.0
+  for k, v in dvec1.items():
+    if k in dvec2:
+      num_acc += v * dvec2[k]
+
+  return num_acc / (sparse_cosine_denominator(
+    dvec1) * sparse_cosine_denominator(dvec2))
+
+
