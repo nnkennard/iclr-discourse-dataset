@@ -19,12 +19,12 @@ class Model(object):
 
   def predict(self):
     predictions = collections.defaultdict(list)
-    for example in self.test_dataset["examples"]:
+    for review_sid, example in self.test_dataset.items():
       review_reps = [self.encode(text) for text in example["review_text"]]
       rebuttal_reps = [self.encode(text) for text in example["rebuttal_text"]]
       for rebuttal_rep in rebuttal_reps:
         top_3 = self._get_top_predictions(review_reps, rebuttal_rep)
-        predictions[example["rebuttal_sid"]].append(top_3)
+        predictions[review_sid].append(top_3)
     return predictions
 
   def _get_top_predictions(self, review_reps, rebuttal_rep):
@@ -38,11 +38,11 @@ class Model(object):
 class TfIdfModel(Model):
 
   def __init__(self, datasets):
-    self.test_dataset = datasets["test"]
+    self.test_dataset = datasets["train"]
     train_dataset = sum([
       example["review_text"]
-      for example in (datasets["train"]["examples"] +
-      datasets["dev"]["examples"])],
+      for example in (list(datasets["train"].values()) +
+      list(datasets["dev"].values()))],
       [])
     self.dct = Dictionary(train_dataset)
     corpus = [self.dct.doc2bow(line) for line in train_dataset]
@@ -58,7 +58,7 @@ class TfIdfModel(Model):
 class SentenceBERTModel(Model):
 
   def __init__(self, datasets):
-    self.test_dataset = datasets["test"]
+    self.test_dataset = datasets["train"]
     self.model = SentenceTransformer('distilbert-base-nli-mean-tokens')
 
   def encode(self, tokens):
@@ -71,24 +71,24 @@ class SentenceBERTModel(Model):
 class BMModel(Model):
 
   def __init__(self, datasets):
-    self.test_dataset = datasets["test"]
+    self.test_dataset = datasets["train"]
 
   def predict(self):
     predictions = collections.defaultdict(list)
-    for example in self.test_dataset["examples"]:
+    for review_sid, example in self.test_dataset.items():
       model = BM25Okapi(example["review_text"])
       labels = []
       for query in example["rebuttal_text"]:
         top_3 = self._pick_top_from_sims(
             torch.FloatTensor(model.get_scores(query)))
-        predictions[example["rebuttal_sid"]].append(top_3)
+        predictions[review_sid].append(top_3)
     return predictions
   
 
 class RobertaModel(Model):
 
   def __init__(self, datasets):
-    self.test_dataset = datasets["test"]
+    self.test_dataset = datasets["train"]
     
     self.tokenizer = RobertaTokenizer.from_pretrained('roberta-large')
     self.model = RobertaModel.from_pretrained('roberta-large')
@@ -96,7 +96,7 @@ class RobertaModel(Model):
 
   def predict(self):
     predictions = {}
-    for example in self.test_dataset["examples"]:
+    for review_sid, example in self.test_dataset.items():
       to_encode = [" ".join(tokens) for tokens in example["review_text"]]
       review_embedding_matrix = np.stack([self.model.encode(sentence)
                                           for sentence in to_encode])
@@ -104,7 +104,7 @@ class RobertaModel(Model):
       for rebuttal_sentence in example["rebuttal_text"]:
         embedding = self.model.encode(" ".join(rebuttal_sentence))
         labels.append(np.argmax(np.dot(review_embedding_matrix, embedding)))
-      predictions[example["rebuttal_sid"]] = labels
+      predictions[review_sid] = labels
 
     return predictions
 

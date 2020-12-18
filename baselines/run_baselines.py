@@ -36,20 +36,23 @@ def load_dataset_splits(data_dir, discourse_unit):
   for split in ["train", "dev", "test"]:
     with open(utils.get_dataset_filename(data_dir, "traindev", split,
       discourse_unit), 'r') as f:
-      datasets[split] = json.load(f)
+      obj = json.load(f)
+      datasets[split] = {example["review_sid"]: example
+          for example in obj["examples"]}
   return datasets 
 
 def main():
 
   args = parser.parse_args()
   
-  if False:
-    for discourse_unit in utils.DiscourseUnit.ALL:
-      for model_name, model_bla in MODEL_MAP.items():
-        datasets = load_dataset_splits(args.data_dir, discourse_unit) 
-        model = model_bla(datasets)
-        predictions = model.predict()
-        print(predictions)
+  for discourse_unit in utils.DiscourseUnit.ALL:
+    for model_name, model_bla in MODEL_MAP.items():
+      datasets = load_dataset_splits(args.data_dir, discourse_unit) 
+      model = model_bla(datasets)
+      predictions = model.predict()
+      print(predictions)
+
+  exit()
 
   from transformers import RobertaTokenizer, RobertaForQuestionAnswering
   import torch
