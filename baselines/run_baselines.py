@@ -26,9 +26,9 @@ parser.add_argument('-n', '--numexamples', default=-1,
 
 MODEL_MAP = {
   "tfidf": models.TfIdfModel,
-  #"sbert": models.SentenceBERTModel,
+  "sbert": models.SentenceBERTModel,
   #"roberta": models.RobertaModel,
-  #"bm25": models.BMModel,
+  "bm25": models.BMModel,
     }
 
 def load_dataset_splits(data_dir, discourse_unit):
