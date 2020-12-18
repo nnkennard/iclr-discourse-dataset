@@ -26,9 +26,9 @@ parser.add_argument('-n', '--numexamples', default=-1,
 
 MODEL_MAP = {
   "tfidf": models.TfIdfModel,
-  "sbert": models.SentenceBERTModel,
-  "roberta": models.RobertaModel,
-  "bm25": models.BMModel,
+  #"sbert": models.SentenceBERTModel,
+  #"roberta": models.RobertaModel,
+  #"bm25": models.BMModel,
     }
 
 def load_dataset_splits(data_dir, discourse_unit):
@@ -42,11 +42,6 @@ def load_dataset_splits(data_dir, discourse_unit):
 def main():
 
   args = parser.parse_args()
-
-  tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-  model = RobertaForQuestionAnswering.from_pretrained('roberta-base')
-
-  exit()
   
   for discourse_unit in utils.DiscourseUnit.ALL:
     for model_name, model_bla in MODEL_MAP.items():

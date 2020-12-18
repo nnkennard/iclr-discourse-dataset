@@ -1,4 +1,6 @@
+import collections
 import gensim
+import torch
 from rank_bm25 import BM25Okapi
 
 import utils
@@ -18,7 +20,20 @@ class Model(object):
     pass
 
   def predict(self):
-    pass
+    predictions = collections.defaultdict(list)
+    for example in self.test_dataset["examples"]:
+      review_reps = [self.encode(text) for text in example["review_text"]]
+      rebuttal_reps = [self.encode(text) for text in example["rebuttal_text"]]
+      for rebuttal_rep in rebuttal_reps:
+        top_3 = self._get_top_predictions(review_reps, rebuttal_rep)
+        predictions[example["rebuttal_sid"]].append(top_3)
+    return predictions
+
+  def _get_top_predictions(self, review_reps, rebuttal_rep):
+    sims = torch.FloatTensor([self.sim(review_rep, rebuttal_rep)
+      for review_rep in review_reps])
+    return torch.topk(sims, k=min(3,len(sims))).indices.data.tolist()
+
 
 class TfIdfModel(Model):
 
@@ -34,7 +49,15 @@ class TfIdfModel(Model):
     self.model = TfidfModel(corpus)
     vector = self.model[corpus[0]]
 
-  def predict(self):
+  def encode(self, tokens):
+    return self.model[self.dct.doc2bow(tokens)]
+
+  def sim(self, vec1, vec2):
+    return utils.sparse_cosine(vec1, vec2)
+
+
+  def old_predict(self):
+
     predictions = {}
     for example in self.test_dataset["examples"]:
       review_vectors = [self.model[self.dct.doc2bow(line)]
