@@ -16,25 +16,37 @@ from transformers import AutoTokenizer, RobertaForQuestionAnswering
 
 EMPTY_CHUNK = ["<br>"]
 
-def get_text_from_example(example, key, skip_empty=True):
-  text = example[key]
-  if skip_empty:
-    text = [t for t in text if not t == EMPTY_CHUNK]
-  return text
+def get_text_from_example(example, key):
+  return [t for t in example[key] if not t == EMPTY_CHUNK]
+
+def get_review_text(example):
+  return get_text_from_example(example, "review_text")
+
+def get_rebuttal_text(example):
+  return get_text_from_example(example, "rebuttal_text")
+
+def token_indexizer(text, piece_type):
+  token_map = []
+  for i, piece in enumerate(text):
+    if piece_type == "chunk":
+      tokens = sum(piece, [])
+    else:
+      tokens = piece
+    token_map += [i] * len(piece)
+  return token_map
 
 
 class Model(object):
   def __init__(self, hyperparam_dict={}):
     pass
 
-  def predict(self, skip_empty=True):
+  def predict(self):
     predictions = collections.defaultdict(list)
     for review_sid, example in self.test_dataset.items():
-      review_text = example["review_text"]
-      if skip_empty:
-        review_text = [text for text in review_text if not text == EMPTY_CHUNK]
+      review_text = get_review_text(example)
       review_reps = [self.encode(text) for text in review_text]
-      rebuttal_reps = [self.encode(text) for text in example["rebuttal_text"]]
+      rebuttal_reps = [self.encode(text) for text in
+          get_rebuttal_text(example)]
       for rebuttal_rep in rebuttal_reps:
         top_3 = self._get_top_predictions(review_reps, rebuttal_rep)
         predictions[review_sid].append(top_3)
@@ -109,14 +121,12 @@ class RobertaModel(Model):
     self.model = RobertaForQuestionAnswering.from_pretrained('roberta-base')
 
 
-  def predict(self, skip_empty=True):
+  def predict(self):
     predictions = collections.defaultdict(list)
     for review_sid, example in self.test_dataset.items():
-      review_text = example["review_text"]
-      if skip_empty:
-        review_text = [text for text in review_text if not text == EMPTY_CHUNK]
+      review_text = get_review_text(example)
       text = " ".join(sum(review_text, []))[:512]
-      for i, rebuttal_chunk in enumerate(example["rebuttal_text"]):
+      for i, rebuttal_chunk in enumerate(get_rebuttal_text(example)):
         question = " ".join(rebuttal_chunk)
         inputs = self.tokenizer(question, text, return_tensors='pt', 
                 return_offsets_mapping=True)
@@ -131,7 +141,7 @@ class RobertaModel(Model):
         loss = outputs.loss
         start_scores = outputs.start_logits
         predictions[review_sid].append([self._get_predicted_chunk(
-          example["review_text"], start_scores, offset_mapping)])
+          review_text, start_scores, offset_mapping)])
     return predictions
 
 
@@ -153,15 +163,16 @@ class RobertaModel(Model):
 class RuleBasedModel(Model):
   def __init__(self, datasets, hyperparameter_dict={}):
     self.test_dataset = datasets["train"]
-    hyperparameter_dict = {"match_file":"rule_based/matches_traindev_2162.json"}
+    hyperparameter_dict = {"match_file": "rule_based/matches_traindev_2.json",
+                           "piece_type": "sentence"}
     self.matches = self._get_matches_from_file(
         hyperparameter_dict["match_file"])
 
-  def predict(self, skip_empty=True):
+  def predict(self):
     predictions = collections.defaultdict(list)
     for review_sid, example in self.test_dataset.items():
-      review_text = get_text_from_example(example, "review_text", skip_empty)
-      rebuttal_text = get_text_from_example(example, "rebuttal_text", skip_empty)
+      review_text = get_review_text(example)
+      rebuttal_text = get_rebutal_text(example)
       for i, rebuttal_piece in enumerate(rebuttal_text):
         results = self._score_review_pieces(review_sid, rebuttal_piece,
             review_text)
@@ -179,7 +190,7 @@ class RuleBasedModel(Model):
 
   def _get_matches_from_file(self, filename):
     with open(filename, 'r') as f:
-      return json.load(f)["matches"]
+      return json.load(f)
 
 
 
