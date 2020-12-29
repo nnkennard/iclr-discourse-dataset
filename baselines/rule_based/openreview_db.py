@@ -1,1 +1,1 @@
-../../lib/openreview_db.py
+../openreview_db.py

@@ -4,7 +4,7 @@ import math
 import sys
 
 
-WINDOW = 5
+WINDOW = 2
 Q = 2124749677  # Is this too big for Python int
 
 
@@ -59,8 +59,7 @@ def karp_rabin(tokens_1, tokens_2):
   return final_matches
 
 Location = collections.namedtuple("Location",
-    "supernote chunk_idx token_idx".split())
-
+    "supernote piece_type piece_idx token_idx".split())
 
 MiniMatch = collections.namedtuple("MiniMatch",
     "review_start rebuttal_start len tokens".split())

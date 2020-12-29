@@ -90,7 +90,11 @@ def collapse_dict(input_dict):
   return [input_dict[i] for i in sorted(input_dict.keys())]
 
 
-
+def crunch_note_text_rows(cur, sid, table_name):
+  cur.execute("SELECT * FROM {0} WHERE sid=?".format(table_name), (sid,))
+  chunks = crunch_text_rows(cur.fetchall())
+  assert len(chunks) == 1
+  return list(chunks.values())[0]
 
 def crunch_text_rows(rows):
   """Crunch rows from text table back into a more readable format.

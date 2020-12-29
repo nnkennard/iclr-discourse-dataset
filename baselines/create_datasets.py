@@ -42,7 +42,7 @@ def get_text(cursor, dataset_name, sid):
 
 def get_datasets(cursor, dataset_name, split, numexamples):
   print("Dataset name: ", dataset_name, "Split: ", split)
-  numexamples = 10
+  numexamples = 30
 
   datasets = {
       discourse_unit:utils.Dataset(dataset_name, split, discourse_unit, []) for
