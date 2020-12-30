@@ -26,13 +26,15 @@ def get_rebuttal_text(example):
   return get_text_from_example(example, "rebuttal_text")
 
 def token_indexizer(text, piece_type):
-  token_map = []
+  token_map = {}
+  offset = 0
   for i, piece in enumerate(text):
     if piece_type == "chunk":
       tokens = sum(piece, [])
     else:
       tokens = piece
-    token_map += [i] * len(piece)
+    token_map[i] = [offset + j for j in range(len(piece))]
+    offset += len(piece)
   return token_map
 
 
@@ -172,20 +174,27 @@ class RuleBasedModel(Model):
     predictions = collections.defaultdict(list)
     for review_sid, example in self.test_dataset.items():
       review_text = get_review_text(example)
-      rebuttal_text = get_rebutal_text(example)
-      for i, rebuttal_piece in enumerate(rebuttal_text):
-        results = self._score_review_pieces(review_sid, rebuttal_piece,
-            review_text)
+      rebuttal_text = get_rebuttal_text(example)
+      results = self._score_review_pieces(
+          review_sid, rebuttal_text, review_text)
 
 
-  def _score_review_pieces(self, review_sid, rebuttal_piece, review_pieces):
-    matches = self.matches[review_sid]
-    print(rebuttal_piece)
-    print(review_pieces)
-    print(matches)
+  def _score_review_pieces(self, review_sid, rebuttal_pieces, review_pieces):
+    rebuttal_token_map = token_indexizer(rebuttal_pieces, "sentence")
+
+    for i, rebuttal_piece in enumerate(rebuttal_pieces):
+      print(rebuttal_piece)
+      print(rebuttal_token_map[i])
+      relevant_matches = [match
+          for match in self.matches[review_sid]
+          if match["rebuttal_start"] in rebuttal_token_map[i]]
+
+      for i in relevant_matches:
+        print(i)
+
+      print("*" * 80)
 
     dsds
-
 
 
   def _get_matches_from_file(self, filename):
