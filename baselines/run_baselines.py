@@ -84,8 +84,6 @@ def main():
       "chunk": {}
       }
   for discourse_unit in utils.DiscourseUnit.ALL:
-    if discourse_unit == "chunk":
-      continue
     datasets = load_dataset_splits(args.data_dir, discourse_unit) 
     prediction_map = {}
     for model_name, model_bla in MODEL_MAP.items():

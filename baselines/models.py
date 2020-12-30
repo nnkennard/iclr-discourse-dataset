@@ -2,6 +2,7 @@ import collections
 import gensim
 import gensim.downloader as api
 import json
+from nltk.corpus import stopwords
 import numpy as np
 import torch
 import utils
@@ -15,6 +16,7 @@ from transformers import AutoTokenizer, RobertaForQuestionAnswering
 
 
 EMPTY_CHUNK = ["<br>"]
+STOP_WORDS = set(stopwords.words('english')).union({",", "."})
 
 def get_text_from_example(example, key):
   return [t for t in example[key] if not t == EMPTY_CHUNK]
@@ -180,11 +182,19 @@ class RobertaModel(Model):
     
     return predictions
 
+def make_content_set(tokens):
+  k = set([token.lower() for token in list(tokens)
+          if token.lower() not in STOP_WORDS])
+  return k
+
+
+def jaccard_similarity(set_1, set_2):
+  return len(set_1.intersection(set_2))/len(set_1.union(set_2))
 
 class RuleBasedModel(Model):
   def __init__(self, datasets, hyperparameter_dict={}):
     self.test_dataset = datasets["train"]
-    hyperparameter_dict = {"match_file": "rule_based/matches_traindev_15.json",
+    hyperparameter_dict = {"match_file": "rule_based/matches_traindev_2162.json",
                            "piece_type": "sentence"}
     self.matches = self._get_matches_from_file(
         hyperparameter_dict["match_file"])
@@ -195,25 +205,35 @@ class RuleBasedModel(Model):
       review_text = get_review_text(example)
       rebuttal_text = get_rebuttal_text(example)
       results = self._score_review_pieces(
-          review_sid, rebuttal_text, review_text)
+          review_sid, rebuttal_pieces=rebuttal_text, review_pieces=review_text)
+
+  def _jaccard_index(self, review_pieces, rebuttal_pieces):
+
+    review_sets = [make_content_set(piece) for piece in review_pieces]
+    rebuttal_sets = [make_content_set(piece) for piece in rebuttal_pieces]
+
+    jaccard_map = collections.defaultdict(dict)
+    for i, rebuttal_set in enumerate(rebuttal_sets):
+      for j, review_set in enumerate(review_sets):
+        jaccard_map[i][j] = jaccard_similarity(rebuttal_set, review_set)
+
+    return jaccard_map
 
 
   def _score_review_pieces(self, review_sid, rebuttal_pieces, review_pieces):
     rebuttal_token_map = token_indexizer(rebuttal_pieces, "sentence")
 
+    jaccard_map = self._jaccard_index(review_pieces=review_pieces,
+        rebuttal_pieces=rebuttal_pieces)
+
     for i, rebuttal_piece in enumerate(rebuttal_pieces):
-      print(rebuttal_piece)
-      print(rebuttal_token_map[i])
       relevant_matches = [match
           for match in self.matches[review_sid]
           if match["rebuttal_start"] in rebuttal_token_map[i]]
-
-      for i in relevant_matches:
-        print(i)
-
-      print("*" * 80)
-
-    dsds
+      if relevant_matches:
+        pass
+      else: # No exact matches 2 or more tokens long; backoff to Jaccard index
+        similarities = jaccard_map[i]
 
 
   def _get_matches_from_file(self, filename):
