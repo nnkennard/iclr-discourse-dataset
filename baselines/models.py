@@ -37,6 +37,23 @@ def token_indexizer(text, piece_type):
     offset += len(piece)
   return token_map
 
+def reverse_token_indexizer(text, piece_type):
+  reverse_map = []
+  for i, piece in enumerate(text):
+    if piece_type == "chunk":
+      tokens = sum(piece, [])
+    else:
+      tokens = piece
+    reverse_map += [i] * len(tokens)
+  return reverse_map
+
+def token_indexizer_2(text, piece_type):
+  reverse_map = reverse_token_indexizer(text, piece_type)
+  token_map = collections.defaultdict(list)
+  for token_i, piece_i in enumerate(reverse_map):
+    token_map[piece_i].append(token_i)
+  return token_map
+
 
 class Model(object):
   def __init__(self, hyperparam_dict={}):
@@ -68,7 +85,7 @@ class TfIdfModel(Model):
   def __init__(self, datasets, hyperparam_dict={}):
     self.test_dataset = datasets["train"]
     train_dataset = sum([
-      example["review_text"]
+      get_review_text(example)
       for example in (list(datasets["train"].values()) +
       list(datasets["dev"].values()))],
       [])
@@ -79,7 +96,8 @@ class TfIdfModel(Model):
   def encode(self, tokens):
     return self.model[self.dct.doc2bow(tokens)]
 
-  def sim(self, vec1, vec2):
+  @staticmethod
+  def sim(vec1, vec2):
     return utils.sparse_cosine(vec1, vec2)
 
 
@@ -92,7 +110,8 @@ class SentenceBERTModel(Model):
   def encode(self, tokens):
     return self.model.encode(" ".join(tokens))
 
-  def sim(self, vec1, vec2):
+  @staticmethod
+  def sim( vec1, vec2):
     return np.dot(vec1, vec2)/(
         np.linalg.norm(vec1)*np.linalg.norm(vec2))
 
@@ -105,9 +124,9 @@ class BMModel(Model):
   def predict(self):
     predictions = collections.defaultdict(list)
     for review_sid, example in self.test_dataset.items():
-      model = BM25Okapi(example["review_text"])
+      model = BM25Okapi(get_review_text(example))
       labels = []
-      for query in example["rebuttal_text"]:
+      for query in get_rebuttal_text(example):
         top_3 = self._pick_top_from_sims(
             torch.FloatTensor(model.get_scores(query)))
         predictions[review_sid].append(top_3)
@@ -165,7 +184,7 @@ class RobertaModel(Model):
 class RuleBasedModel(Model):
   def __init__(self, datasets, hyperparameter_dict={}):
     self.test_dataset = datasets["train"]
-    hyperparameter_dict = {"match_file": "rule_based/matches_traindev_2.json",
+    hyperparameter_dict = {"match_file": "rule_based/matches_traindev_15.json",
                            "piece_type": "sentence"}
     self.matches = self._get_matches_from_file(
         hyperparameter_dict["match_file"])

@@ -21,12 +21,16 @@ NEWLINE_TOKEN = "<br>"
 STOP_WORDS = set(stopwords.words('english')).union({",", ".", NEWLINE_TOKEN})
 EMPTY_CHUNK = [NEWLINE_TOKEN]
 
+def chunks_to_tokens(chunks):
+  return [token
+      for token in sum(sum(chunks, []), [])
+      if not token == NEWLINE_TOKEN]
 
 def get_match_list(cur, review_sid, rebuttal_sid, table_name):
-  review_tokens = sum(sum(ordb.crunch_note_text_rows(
-      cur, review_sid, "traindev"), []), [])
-  rebuttal_tokens = sum(sum(ordb.crunch_note_text_rows(
-      cur, rebuttal_sid, "traindev"), []), [])
+  review_tokens = chunks_to_tokens(ordb.crunch_note_text_rows(
+      cur, review_sid, "traindev"))
+  rebuttal_tokens = chunks_to_tokens(ordb.crunch_note_text_rows(
+      cur, rebuttal_sid, "traindev"))
 
   match_indices = karp_rabin.karp_rabin(review_tokens, rebuttal_tokens)
   final_matches = []
