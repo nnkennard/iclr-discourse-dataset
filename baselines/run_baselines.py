@@ -68,7 +68,10 @@ def summarize_results(prediction_map, datasets):
     vote_map = collections.defaultdict(lambda:collections.defaultdict(int))
     voter_map = collections.defaultdict(lambda:collections.defaultdict(list))
     for model, predictions in prediction_map.items():
+      for k, v in predictions.items():
+        print("----------", k, v)
       for rebuttal_chunk_i, rebuttal_chunk_predictions in enumerate(predictions[review_sid]):
+        print("@@@@", rebuttal_chunk_predictions)
         for multiplier, idx in zip([4,2,1], rebuttal_chunk_predictions):
           vote_map[rebuttal_chunk_i][idx] += multiplier
           voter_map[rebuttal_chunk_i][idx].append(model)

@@ -8,7 +8,7 @@ class DiscourseUnit(object):
   ALL = [sentence, chunk]
 
 Dataset = collections.namedtuple("Dataset",
-  "dataset_name split discourse_unit examples".split())
+  "dataset_name split examples".split())
 Example = collections.namedtuple("Example",
   "review_sid rebuttal_sid review_text rebuttal_text labels")
 Prediction = collections.namedtuple("Prediction",

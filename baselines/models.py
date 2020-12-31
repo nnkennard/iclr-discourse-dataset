@@ -206,6 +206,9 @@ class RuleBasedModel(Model):
       rebuttal_text = get_rebuttal_text(example)
       results = self._score_review_pieces(
           review_sid, rebuttal_pieces=rebuttal_text, review_pieces=review_text)
+      print("]]", results)
+      predictions[review_sid] = results
+    return predictions
 
   def _jaccard_index(self, review_pieces, rebuttal_pieces):
 
@@ -220,20 +223,34 @@ class RuleBasedModel(Model):
     return jaccard_map
 
 
-  def _score_review_pieces(self, review_sid, rebuttal_pieces, review_pieces):
-    rebuttal_token_map = token_indexizer(rebuttal_pieces, "sentence")
+  def _score_review_pieces(self, review_sid, rebuttal_pieces, review_pieces,
+      piece_type="sentence"):
+    rebuttal_token_map = token_indexizer(rebuttal_pieces, piece_type)
+    reverse_token_map = reverse_token_indexizer(review_pieces, piece_type)
 
     jaccard_map = self._jaccard_index(review_pieces=review_pieces,
         rebuttal_pieces=rebuttal_pieces)
+
+    result_map = []
 
     for i, rebuttal_piece in enumerate(rebuttal_pieces):
       relevant_matches = [match
           for match in self.matches[review_sid]
           if match["rebuttal_start"] in rebuttal_token_map[i]]
       if relevant_matches:
-        pass
+        for m in relevant_matches:
+          relevant_review_index = reverse_token_map[m["review_start"]]
+          relevant_review_piece = review_pieces[relevant_review_index]
+          result_map.append([relevant_review_index])
+          break
+          
       else: # No exact matches 2 or more tokens long; backoff to Jaccard index
         similarities = jaccard_map[i]
+        result_map.append([max(similarities, key=similarities.get)])
+
+    assert len(result_map) == len(rebuttal_pieces)
+
+    return result_map
 
 
   def _get_matches_from_file(self, filename):
