@@ -58,9 +58,6 @@ def karp_rabin(tokens_1, tokens_2):
       final_matches.append(match)
   return final_matches
 
-Location = collections.namedtuple("Location",
-    "supernote piece_type piece_idx token_idx".split())
-
 MiniMatch = collections.namedtuple("MiniMatch",
     "review_start rebuttal_start len tokens".split())
 

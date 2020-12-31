@@ -17,14 +17,17 @@ parser.add_argument('-d', '--dbfile', default="../../db/or.db",
 parser.add_argument('-n', '--numexamples', default=-1,
     type=int, help='number of examples to dump as string. If -1, dump all')
 
+
 NEWLINE_TOKEN = "<br>"
 STOP_WORDS = set(stopwords.words('english')).union({",", ".", NEWLINE_TOKEN})
 EMPTY_CHUNK = [NEWLINE_TOKEN]
+
 
 def chunks_to_tokens(chunks):
   return [token
       for token in sum(sum(chunks, []), [])
       if not token == NEWLINE_TOKEN]
+
 
 def get_match_list(cur, review_sid, rebuttal_sid, table_name):
   review_tokens = chunks_to_tokens(ordb.crunch_note_text_rows(

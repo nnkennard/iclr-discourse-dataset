@@ -18,7 +18,6 @@ parser.add_argument('-n', '--numexamples', default=-1,
         type=int, help="Number of examples per dataset; -1 to include all")
 
 
-
 def get_pairs(cursor, dataset_name, split, numexamples):
   get_pairs_command = "SELECT * FROM {0}_pairs WHERE split=?".format(
       dataset_name)
@@ -28,43 +27,40 @@ def get_pairs(cursor, dataset_name, split, numexamples):
   return cursor.execute(get_pairs_command, (split,)).fetchall()
 
 
-def get_text(cursor, dataset_name, sid):
+def get_text(cursor, dataset_name, sid, discourse_unit):
   rows = cursor.execute("SELECT * FROM {0} WHERE sid=?".format(dataset_name),
                 (sid,))
   chunks, = ordb.crunch_text_rows(rows).values()
-  sentences = sum(chunks, [])
-  chunks = [sum(chunk, []) for chunk in chunks]
-  return {
-      utils.DiscourseUnit.chunk: chunks,
-      utils.DiscourseUnit.sentence: sentences
-      }
+  if discourse_unit == utils.DiscourseUnit.sentence:
+    text = sum(chunks, [])
+  else:
+    text = [sum(chunk, []) for chunk in chunks]
+  return text 
 
 
-def get_datasets(cursor, dataset_name, split, numexamples):
+def get_dataset(cursor, dataset_name, split, numexamples):
   print("Dataset name: ", dataset_name, "Split: ", split)
-  numexamples = 30
 
-  datasets = {
-      discourse_unit:utils.Dataset(dataset_name, split, discourse_unit, []) for
-      discourse_unit in utils.DiscourseUnit.ALL}
-
+  dataset = utils.Dataset(dataset_name, split, [])
   pairs = get_pairs(cursor, dataset_name, split, numexamples)
+
   for pair in tqdm(pairs):
     review_sid = pair["review_sid"]
     rebuttal_sid = pair["rebuttal_sid"]
 
-    review_text = get_text(cursor, dataset_name, review_sid)
-    rebuttal_text = get_text(cursor, dataset_name, rebuttal_sid)
+    review_text = get_text(cursor, dataset_name, review_sid,
+            utils.DiscourseUnit.sentence)
+    rebuttal_text = get_text(cursor, dataset_name, rebuttal_sid,
+            utils.DiscourseUnit.chunk)
 
-    for discourse_unit in utils.DiscourseUnit.ALL:
-      datasets[discourse_unit].examples.append(utils.Example(
-        review_sid=review_sid,
-        rebuttal_sid=rebuttal_sid,
-        review_text=review_text[discourse_unit],
-        rebuttal_text=rebuttal_text[discourse_unit],
-        labels = [None] * len(rebuttal_text[discourse_unit]),
-        ))
-    
+    dataset.examples.append(utils.Example(
+    review_sid=review_sid,
+    rebuttal_sid=rebuttal_sid,
+    review_text=review_text,
+    rebuttal_text=rebuttal_text,
+    labels = [None] * len(rebuttal_text),
+    ))
+
   return datasets
 
 def main():
@@ -74,12 +70,10 @@ def main():
   cursor = ordb.get_cursor(args.dbfile)
 
   for dataset_name, split in utils.DATASET_NAMES:
-    datasets = get_datasets(cursor, dataset_name, split, args.numexamples)
-    for discourse_unit in utils.DiscourseUnit.ALL:
-      filename = utils.get_dataset_filename(args.out_dir, dataset_name, split,
-          discourse_unit)
-      with open(filename, 'w') as f:
-        json.dump(utils.dump_dataset(datasets[discourse_unit]), f)
+    dataset = get_dataset(cursor, dataset_name, split, args.numexamples)
+    filename = utils.get_dataset_filename(args.out_dir, dataset_name, split)
+    with open(filename, 'w') as f:
+        json.dump(utils.dump_dataset(dataset), f)
 
 
 if __name__ == "__main__":
