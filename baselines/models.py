@@ -27,29 +27,15 @@ def get_review_text(example):
 def get_rebuttal_text(example):
   return get_text_from_example(example, "rebuttal_text")
 
-def token_indexizer(text, piece_type):
-  token_map = {}
-  offset = 0
-  for i, piece in enumerate(text):
-    if piece_type == "chunk":
-      tokens = sum(piece, [])
-    else:
-      tokens = piece
-    token_map[i] = [offset + j for j in range(len(piece))]
-    offset += len(piece)
-  return token_map
 
 def reverse_token_indexizer(text, piece_type):
   reverse_map = []
-  for i, piece in enumerate(text):
-    if piece_type == "chunk":
-      tokens = sum(piece, [])
-    else:
-      tokens = piece
+  for i, tokens in enumerate(text):
     reverse_map += [i] * len(tokens)
   return reverse_map
 
-def token_indexizer_2(text, piece_type):
+
+def token_indexizer(text, piece_type):
   reverse_map = reverse_token_indexizer(text, piece_type)
   token_map = collections.defaultdict(list)
   for token_i, piece_i in enumerate(reverse_map):
@@ -182,6 +168,7 @@ class RobertaModel(Model):
     
     return predictions
 
+
 def make_content_set(tokens):
   k = set([token.lower() for token in list(tokens)
           if token.lower() not in STOP_WORDS])
@@ -191,11 +178,14 @@ def make_content_set(tokens):
 def jaccard_similarity(set_1, set_2):
   return len(set_1.intersection(set_2))/len(set_1.union(set_2))
 
+
+THRESHOLD = 0.8
+
+
 class RuleBasedModel(Model):
   def __init__(self, datasets, hyperparameter_dict={}):
     self.test_dataset = datasets["train"]
-    hyperparameter_dict = {"match_file": "rule_based/matches_traindev_31.json",
-                           "piece_type": "sentence"}
+    hyperparameter_dict = {"match_file": "rule_based/matches_traindev_31.json"}
     self.matches = self._get_matches_from_file(
         hyperparameter_dict["match_file"])
 
@@ -205,8 +195,7 @@ class RuleBasedModel(Model):
       review_text = get_review_text(example)
       rebuttal_text = get_rebuttal_text(example)
       results = self._score_review_pieces(
-          review_sid, rebuttal_pieces=rebuttal_text, review_pieces=review_text)
-      print("]]", results)
+          review_sid, rebuttal_chunks=rebuttal_text, review_sentences=review_text)
       predictions[review_sid] = results
     return predictions
 
@@ -222,40 +211,48 @@ class RuleBasedModel(Model):
 
     return jaccard_map
 
+  def _score_review_pieces(self, review_sid, rebuttal_chunks, review_sentences):
 
-  def _score_review_pieces(self, review_sid, rebuttal_pieces, review_pieces,
-      piece_type="sentence"):
-    rebuttal_token_map = token_indexizer(rebuttal_pieces, piece_type)
-    reverse_token_map = reverse_token_indexizer(review_pieces, piece_type)
+    rebuttal_token_map = token_indexizer(rebuttal_chunks, "chunk")
+    review_token_map = reverse_token_indexizer(review_sentences, "sentence")
 
-    jaccard_map = self._jaccard_index(review_pieces=review_pieces,
-        rebuttal_pieces=rebuttal_pieces)
+    jaccard_map = self._jaccard_index(review_pieces=review_sentences,
+        rebuttal_pieces=rebuttal_chunks)
 
     result_map = []
 
-    for i, rebuttal_piece in enumerate(rebuttal_pieces):
+    for i, rebuttal_chunk in enumerate(rebuttal_chunks):
       relevant_matches = [match
           for match in self.matches[review_sid]
           if match["rebuttal_start"] in rebuttal_token_map[i]]
-      if relevant_matches:
-        for m in relevant_matches:
-          relevant_review_index = reverse_token_map[m["review_start"]]
-          relevant_review_piece = review_pieces[relevant_review_index]
-          result_map.append([relevant_review_index])
-          break
-          
+      if relevant_matches: 
+        longest_matches = get_longest_matches(relevant_matches)
+        ratios = {}
+        for i, match in enumerate(longest_matches):
+          relevant_review_index = review_token_map[match["review_start"]]
+          ratio = len(match["tokens"])/len(rebuttal_chunk)
+          if ratio > THRESHOLD:
+            ratios[ratio] = i
+        if ratios:
+          max_ratio_index = ratios[max(ratios.keys())]
+          result_map.append([max_ratio_index + 1])
+          continue
+        else: # There are some matches, but none are super long
+          result_map.append(
+            [review_token_map[longest_matches[0]["review_start"]]])
+
       else: # No exact matches 2 or more tokens long; backoff to Jaccard index
         similarities = jaccard_map[i]
         result_map.append([max(similarities, key=similarities.get)])
 
-    assert len(result_map) == len(rebuttal_pieces)
+    assert len(result_map) == len(rebuttal_chunks)
 
     return result_map
-
 
   def _get_matches_from_file(self, filename):
     with open(filename, 'r') as f:
       return json.load(f)
 
-
-
+def get_longest_matches(relevant_matches):
+  max_token_len = max(len(x["tokens"]) for x in relevant_matches)
+  return [m for m in relevant_matches if len(m["tokens"]) == max_token_len]

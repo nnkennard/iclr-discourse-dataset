@@ -1,7 +1,3 @@
-#virtualenv --python `which python3` idd_ve
-#source idd_ve/bin/activate
-#python -m pip install -r requirements.txt
-
 #rm -rf db
 #mkdir db
 #rm -rf temp

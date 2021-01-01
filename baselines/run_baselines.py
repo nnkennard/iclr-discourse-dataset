@@ -14,8 +14,6 @@ from tqdm import tqdm
 
 parser = argparse.ArgumentParser(
         description='Create datasets for training baseline models')
-#parser.add_argument('-b', '--dbfile', default="../db/or.db",
-#        type=str, help="Database in sqlite3 format")
 parser.add_argument('-d', '--data_dir', default="datasets/",
         type=str, help="Dataset directory")
 parser.add_argument('-r', '--result_dir', default="results/",
@@ -32,6 +30,7 @@ MODEL_MAP = {
   "rule": models.RuleBasedModel,
     }
 
+
 def load_dataset_splits(data_dir, discourse_unit):
   datasets = {}
   for split in ["train", "dev", "test"]:
@@ -42,7 +41,9 @@ def load_dataset_splits(data_dir, discourse_unit):
           for example in obj["examples"]}
   return datasets 
 
+
 EMPTY_CHUNK = ["<br>"]
+
 
 def print_with_votes(example, vote_map, voter_map):
   for i, rebuttal_chunk in enumerate(example["rebuttal_text"]):
@@ -78,6 +79,7 @@ def summarize_results(prediction_map, datasets):
     print("Review:", review_sid)
     print_with_votes(example, vote_map, voter_map)
           
+
 def main():
 
   args = parser.parse_args()
