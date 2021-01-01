@@ -61,7 +61,7 @@ def get_dataset(cursor, dataset_name, split, numexamples):
     labels = [None] * len(rebuttal_text),
     ))
 
-  return datasets
+  return dataset
 
 def main():
 

@@ -21,13 +21,11 @@ DATASET_NAMES = [
     ("truetest", "test")
     ]
 
-def get_dataset_filename(dataset_dir, dataset_name, split, discourse_unit):
-  return dataset_dir + "/" + "_".join([dataset_name, split,
-        discourse_unit]) + ".json"
+def get_dataset_filename(dataset_dir, dataset_name, split):
+  return dataset_dir + "/" + "_".join([dataset_name, split]) + ".json"
 
 def dump_dataset(dataset):
   dataset_2 = Dataset(dataset.dataset_name, dataset.split,
-      dataset.discourse_unit,
       [example._asdict() for example in dataset.examples])
   return dataset_2._asdict()
 

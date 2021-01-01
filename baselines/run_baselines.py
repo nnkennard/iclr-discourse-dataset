@@ -35,8 +35,8 @@ MODEL_MAP = {
 def load_dataset_splits(data_dir, discourse_unit):
   datasets = {}
   for split in ["train", "dev", "test"]:
-    with open(utils.get_dataset_filename(data_dir, "traindev", split,
-      discourse_unit), 'r') as f:
+    with open(utils.get_dataset_filename(data_dir, "traindev", split
+      ), 'r') as f:
       obj = json.load(f)
       datasets[split] = {example["review_sid"]: example
           for example in obj["examples"]}

@@ -4,8 +4,8 @@ import glob
 import os
 import sys
 
-import lib.openreview_db as ordb
-import lib.openreview_lib as orl
+import openreview_db as ordb
+import openreview_lib as orl
 
 
 parser = argparse.ArgumentParser(
@@ -26,7 +26,7 @@ def main():
   args = parser.parse_args()
   conn = ordb.create_connection(args.dbfile)
   if args.clean:
-    for filename in glob.glob("db/*") + glob.glob("/iesl/canvas/nnayak/temp/or_ir/*"):
+    for filename in glob.glob("db/*"):# + glob.glob("/iesl/canvas/nnayak/temp/or_ir/*"):
       try:
         print("Deleting ", filename)
         os.remove(filename)

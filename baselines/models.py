@@ -194,7 +194,7 @@ def jaccard_similarity(set_1, set_2):
 class RuleBasedModel(Model):
   def __init__(self, datasets, hyperparameter_dict={}):
     self.test_dataset = datasets["train"]
-    hyperparameter_dict = {"match_file": "rule_based/matches_traindev_2162.json",
+    hyperparameter_dict = {"match_file": "rule_based/matches_traindev_31.json",
                            "piece_type": "sentence"}
     self.matches = self._get_matches_from_file(
         hyperparameter_dict["match_file"])
