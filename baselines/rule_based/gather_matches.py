@@ -9,6 +9,7 @@ import re
 import karp_rabin
 import trie
 import openreview_db as ordb
+import openreview_lib as orl
 
 parser = argparse.ArgumentParser(
     description='Load OpenReview data from a sqlite3 database.')
@@ -18,21 +19,15 @@ parser.add_argument('-n', '--numexamples', default=-1,
     type=int, help='number of examples to dump as string. If -1, dump all')
 
 
-NEWLINE_TOKEN = "<br>"
-STOP_WORDS = set(stopwords.words('english')).union({",", ".", NEWLINE_TOKEN})
-EMPTY_CHUNK = [NEWLINE_TOKEN]
-
-
-def chunks_to_tokens(chunks):
-  return [token
-      for token in sum(sum(chunks, []), [])
-      if not token == NEWLINE_TOKEN]
+#NEWLINE_TOKEN = "<br>"
+STOP_WORDS = set(stopwords.words('english')).union({",", ".", orl.NEWLINE_TOKEN})
+EMPTY_CHUNK = [orl.NEWLINE_TOKEN]
 
 
 def get_match_list(cur, review_sid, rebuttal_sid, table_name):
-  review_tokens = chunks_to_tokens(ordb.crunch_note_text_rows(
+  review_tokens = orl.chunks_to_tokens(ordb.crunch_note_text_rows(
       cur, review_sid, "traindev"))
-  rebuttal_tokens = chunks_to_tokens(ordb.crunch_note_text_rows(
+  rebuttal_tokens = orl.chunks_to_tokens(ordb.crunch_note_text_rows(
       cur, rebuttal_sid, "traindev"))
 
   match_indices = karp_rabin.karp_rabin(review_tokens, rebuttal_tokens)
@@ -66,7 +61,7 @@ def main():
     matches[pair["review_sid"]] = get_match_list(
         cur, pair["review_sid"], pair["rebuttal_sid"], "traindev")
 
-  filename = "".join(["matches_traindev_", str(len(pairs)), ".json"])
+  filename = "".join(["matches_traindev.json"])
 
   with open(filename, 'w') as f:
     json.dump(matches, f)

@@ -73,7 +73,7 @@ def main():
     dataset = get_dataset(cursor, dataset_name, split, args.numexamples)
     filename = utils.get_dataset_filename(args.out_dir, dataset_name, split)
     with open(filename, 'w') as f:
-        json.dump(utils.dump_dataset(dataset), f)
+      json.dump(utils.dump_dataset(dataset), f)
 
 
 if __name__ == "__main__":

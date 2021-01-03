@@ -185,7 +185,7 @@ THRESHOLD = 0.8
 class RuleBasedModel(Model):
   def __init__(self, datasets, hyperparameter_dict={}):
     self.test_dataset = datasets["train"]
-    hyperparameter_dict = {"match_file": "rule_based/matches_traindev_31.json"}
+    hyperparameter_dict = {"match_file": "rule_based/matches_traindev.json"}
     self.matches = self._get_matches_from_file(
         hyperparameter_dict["match_file"])
 
@@ -220,6 +220,8 @@ class RuleBasedModel(Model):
         rebuttal_pieces=rebuttal_chunks)
 
     result_map = []
+
+    print(self.matches.keys())
 
     for i, rebuttal_chunk in enumerate(rebuttal_chunks):
       relevant_matches = [match

@@ -1,5 +1,4 @@
 import argparse
-import corenlp
 import glob
 import os
 import sys
@@ -34,10 +33,7 @@ def main():
         print("Alas, an error")
   if conn is not None:
     ordb.create_tables(conn)
-    with corenlp.CoreNLPClient(
-        annotators=orl.CORENLP_ANNOTATORS, output_format='conll') as corenlp_client:
-      orl.get_datasets(
-          args.inputfile, corenlp_client, conn, debug=args.debug)  
+    orl.get_datasets(args.inputfile, conn, debug=args.debug)  
   else:
     print("Database connection error.")
 

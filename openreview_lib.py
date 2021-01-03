@@ -1,4 +1,5 @@
 import collections
+import corenlp
 import json
 import openreview
 import os
@@ -10,6 +11,8 @@ import openreview_db as ordb
 
 CORENLP_ANNOTATORS = "ssplit tokenize"
 Pair = collections.namedtuple("Pair", "forum review rebuttal".split())
+
+NEWLINE_TOKEN = "<br>"
 
 class Conference(object):
   iclr18 = "iclr18"
@@ -59,7 +62,7 @@ FAKE_SPLIT_MAP = {ordb.TextTables.UNSTRUCTURED: "train",
                   ordb.TextTables.TRUE_TEST: "test"}
 
 
-def get_datasets(dataset_file, corenlp_client, conn, debug=False):
+def get_datasets(dataset_file, conn, debug=False):
   """Given a dataset file, enter its reviews and rebuttals into a database. 
 
     Args:
@@ -74,18 +77,21 @@ def get_datasets(dataset_file, corenlp_client, conn, debug=False):
 
   guest_client = openreview.Client(baseurl='https://api.openreview.net')
 
-  for subset, subset_info in dataset_obj.items():
-    forum_ids = subset_info["forums"]
-    conference = subset_info["conference"]
+  with corenlp.CoreNLPClient(
+      annotators=CORENLP_ANNOTATORS, output_format='conll') as corenlp_client:
 
-    if subset == ordb.TextTables.TRAIN_DEV:
-      for set_split, set_forum_ids in forum_ids.items():
-        build_dataset(subset, set_forum_ids, guest_client, corenlp_client, conn,
-                      conference, set_split, subset, debug)
-    else:
-      fake_split = FAKE_SPLIT_MAP[subset]
-      build_dataset(subset, forum_ids, guest_client, corenlp_client, conn,
-                    conference, fake_split, subset, debug)
+    for subset, subset_info in dataset_obj.items():
+      forum_ids = subset_info["forums"]
+      conference = subset_info["conference"]
+
+      if subset == ordb.TextTables.TRAIN_DEV:
+        for set_split, set_forum_ids in forum_ids.items():
+          build_dataset(subset, set_forum_ids, guest_client, corenlp_client, conn,
+                        conference, set_split, subset, debug)
+      else:
+        fake_split = FAKE_SPLIT_MAP[subset]
+        build_dataset(subset, forum_ids, guest_client, corenlp_client, conn,
+                      conference, fake_split, subset, debug)
 
 
 def flatten_signature(note):
@@ -129,7 +135,8 @@ def get_tokenized_chunks(corenlp_client, text):
       A list of chunks in which a chunk is a list of sentences and a sentence is
       a list of tokens.
   """
-  chunks = [chunk if chunk else "<br>" for chunk in text.split("\n") ]
+  chunks = [chunk if chunk else NEWLINE_TOKEN
+                  for chunk in text.split("\n") ]
   return [get_tokens_from_tokenized(corenlp_client.annotate(chunk))
           for chunk in chunks]
 
@@ -384,3 +391,9 @@ def build_dataset(dataset_name, forum_ids, or_client, corenlp_client, conn, conf
       lambda: insert_text_rows(sid_map, review_rebuttal_pairs, or_client,
         corenlp_client, conn, table, set_split))
   
+def chunks_to_tokens(chunks):
+  return [token
+      for token in sum(sum(chunks, []), [])
+      if not token == NEWLINE_TOKEN]
+
+
