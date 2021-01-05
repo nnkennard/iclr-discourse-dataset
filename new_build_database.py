@@ -8,7 +8,8 @@ ForumList = collections.namedtuple("ForumList",
                                    "conference forums url".split())
 
 def get_unstructured_ids(conference, client):
-  return get_sampled_forums(conference, client, 1)
+  #return get_sampled_forums(conference, client, 1)
+  return get_sampled_forums(conference, client, 0.01)
 
 
 def get_sampled_forums(conference, client, sample_rate):
