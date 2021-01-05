@@ -354,7 +354,8 @@ def insert_text_rows(sid_map, review_rebuttal_pairs,
               supernote_as_dict, corenlp_client)
       ordb.insert_into_table(conn, table, ordb.TEXT_FIELDS, text)
 
-def get_temp_path(temp_file_type, dataset, split, temp_path="/mnt/nfs/scratch1/nnayak/iclr-discourse-dataset/temp/"):
+def get_temp_path(temp_file_type, dataset, split,
+    temp_path="/iesl/canvas/nnayak/iclr-discourse-dataset/temp/"):
   return temp_path + "_".join([dataset, split, temp_file_type]) + ".pkl"
 
 

@@ -176,6 +176,8 @@ def make_content_set(tokens):
 
 
 def jaccard_similarity(set_1, set_2):
+  if not set_1 or not set_2:
+    return 0.0
   return len(set_1.intersection(set_2))/len(set_1.union(set_2))
 
 
@@ -220,8 +222,6 @@ class RuleBasedModel(Model):
         rebuttal_pieces=rebuttal_chunks)
 
     result_map = []
-
-    print(self.matches.keys())
 
     for i, rebuttal_chunk in enumerate(rebuttal_chunks):
       relevant_matches = [match
