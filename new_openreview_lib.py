@@ -2,7 +2,8 @@ import collections
 
 from tqdm import tqdm
 
-CORENLP_ANNOTATORS = "ssplit tokenize"
+#CORENLP_ANNOTATORS = "ssplit tokenize"
+NEWLINE_TOKEN = "<br>"
 Pair = collections.namedtuple("Pair", "forum review rebuttal".split())
 
 class Conference(object):
@@ -175,15 +176,93 @@ def get_review_rebuttal_pairs(forums, or_client):
     sid_map[forum_id] = forum_sid_map
     review_rebuttal_pairs += sid_pairs
 
-  for pair in tqdm(review_rebuttal_pairs):
-    forum_notes = or_client.get_notes(forum=pair.forum)
-    assert sorted(forum_notes, key=lambda x:x.tcdate)[0].id == pair.forum
-    forum_title = forum_notes[0].content["title"]
-    review_author, = [flatten_signature(note)
-                      for note in forum_notes
-                      if note.id == pair.review]
+  full_sid_map = {}
+  for forum_id, forum_sid_map in sid_map.items():
+    id_to_note_map = {note.id:note
+        for note in or_client.get_notes(forum=forum_id)} 
+    full_sid_map[forum_id] = {k:[id_to_note_map[i] for i in v]
+                              for k, v in forum_sid_map.items()}
+
+  #for pair in tqdm(review_rebuttal_pairs):
+  # ` forum_notes = or_client.get_notes(forum=pair.forum)
+  #  assert sorted(forum_notes, key=lambda x:x.tcdate)[0].id == pair.forum
+  #  forum_title = forum_notes[0].content["title"]
+  #  review_author, = [flatten_signature(note)
+  #                    for note in forum_notes
+  #                    if note.id == pair.review]
 
 
-  return sid_map, review_rebuttal_pairs
+  return full_sid_map, review_rebuttal_pairs
+
+def get_tokens_from_tokenized(tokenized):
+  """Extract token sequences from CoreNLP output.
+    Args:
+      tokenized: The conll-formatted output from a CoreNLP server with ssplit
+      and tokenize
+    Returns:
+      sentences: A list of sentences in which each sentence is a list of tokens.
+  """
+  lines = tokenized.split("\n")
+  sentences = []
+  current_sentence = []
+  for line in lines:
+    if not line.strip(): # Blank links indicate the end of a sentence
+      if current_sentence:
+        sentences.append(current_sentence)
+      current_sentence = []
+    else:
+      current_sentence.append(line.split()[TOKEN_INDEX])
+  return sentences 
 
 
+def get_tokenized_chunks(corenlp_client, text):
+  """Runs tokenization using a CoreNLP client.
+    Args:
+      corenlp_client: a corenlp client with at least ssplit and tokenize
+      text: raw text
+    Returns:
+      A list of chunks in which a chunk is a list of sentences and a sentence is
+      a list of tokens.
+  """
+  chunks = [chunk if chunk else NEWLINE_TOKEN
+                  for chunk in text.split("\n") ]
+  return [get_tokens_from_tokenized(corenlp_client.annotate(chunk))
+          for chunk in chunks]
+
+
+def get_info(note):
+  """Gets relevant note metadata.
+    Args:
+      note_id: the note id from the openreview.Note object
+      note_map: a map from note ids to relevant openreview.Note objects
+    Returns:
+      The text_type, text and authors of the note.
+  """
+  if note.replyto is None:
+    return "root", "", flatten_signature(note)
+  else:
+    for text_type in ["review", "comment", "withdrawal confirmation",
+            "metareview"]:
+      if text_type in note.content:
+        return text_type, note.content[text_type], flatten_signature(note)
+    assert False
+
+
+    
+def get_text_from_note_list(note_list, supernote_as_dict, corenlp_client):
+  chunk_offset = 0
+  supernote_chunks = []
+
+  for subnote in note_list:
+    text_type, text, subnote_author = get_info(subnote)
+    supernote_chunks += get_tokenized_chunks(corenlp_client, text)
+
+  return supernote_chunks
+
+def get_pair_text(unstruct_pairs, unstruct_sid_map, corenlp_client):
+  text_map = {}
+  for pair in unstruct_pairs:
+    for sid in [pair.review, pair.rebuttal]:
+      text_map[sid] = get_text_from_note_list(
+          unstruct_sid_map[pair.forum][sid], None, corenlp_client)
+  return text_map
