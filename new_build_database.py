@@ -32,19 +32,29 @@ def get_pair_text_from_forums(forums, guest_client):
       annotators=CORENLP_ANNOTATORS, output_format='conll') as corenlp_client:
     return norl.get_pair_text(pairs, sid_map, corenlp_client)
 
+def get_abstracts_from_forums(forums, guest_client):
+  with corenlp.CoreNLPClient(
+      annotators=CORENLP_ANNOTATORS, output_format='conll') as corenlp_client:
+    return norl.get_abstract_texts(forums, guest_client, corenlp_client)
+
 def get_unstructured(conference, guest_client, output_dir):
-  forums =  get_sampled_forums(conference, guest_client, 0.01).forums
+  forums =  get_sampled_forums(conference, guest_client, 1).forums
   pair_texts = get_pair_text_from_forums(forums, guest_client)
+  unstructured_text = []
+  for pair in pair_texts:
+    unstructured_text.append(pair["review_text"])
+    unstructured_text.append(sum(pair["rebuttal_text"], []))
   with open(output_dir + "/" + norl.Split.UNSTRUCTURED + ".json", 'w') as f:
     json.dump({
       "conference": conference,
       "split": norl.Split.UNSTRUCTURED,
-      "review_rebuttal_pairs": pair_texts,
-      "abstracts": None
+      "subsplit": norl.SubSplit.TRAIN,
+      "review_rebuttal_text": unstructured_text,
+      "abstracts": get_abstracts_from_forums(forums, guest_client)
       }, f)
 
 def get_traindev(conference, guest_client, output_dir):
-  forums = get_sampled_forums(conference, guest_client, 0.01).forums
+  forums = get_sampled_forums(conference, guest_client, 1).forums
   random.shuffle(forums)
   offsets = {
       norl.SubSplit.DEV :(0, int(0.2*len(forums))),
@@ -69,12 +79,13 @@ def get_traindev(conference, guest_client, output_dir):
       }, f)
 
 def get_truetest(conference, guest_client, output_dir):
-  forums =  get_sampled_forums(conference, guest_client, 0.01).forums
+  forums =  get_sampled_forums(conference, guest_client, 0.2).forums
   pair_texts = get_pair_text_from_forums(forums, guest_client)
   with open(output_dir + "/" + norl.Split.TRUETEST + ".json", 'w') as f:
     json.dump({
       "conference": conference,
       "split": norl.Split.UNSTRUCTURED,
+      "subsplit": norl.SubSplit.TEST,
       "review_rebuttal_pairs": pair_texts,
       "abstracts": None
       }, f)
@@ -82,8 +93,6 @@ def get_truetest(conference, guest_client, output_dir):
 
 def main():
   guest_client = openreview.Client(baseurl='https://api.openreview.net')
-
-  # Declare unstructured/traindev/truetest
 
   SPLIT_TO_CONFERENCE = {
     norl.Split.UNSTRUCTURED: norl.Conference.iclr18,

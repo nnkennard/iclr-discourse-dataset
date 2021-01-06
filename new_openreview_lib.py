@@ -4,7 +4,7 @@ from tqdm import tqdm
 
 #CORENLP_ANNOTATORS = "ssplit tokenize"
 NEWLINE_TOKEN = "<br>"
-Pair = collections.namedtuple("Pair", "forum review rebuttal".split())
+Pair = collections.namedtuple("Pair", "forum review_sid rebuttal_sid".split())
 
 class Conference(object):
   iclr18 = "iclr18"
@@ -21,6 +21,10 @@ class SubSplit(object):
   TRAIN = "train"
   DEV = "dev"
   TEST = "test"
+
+class DiscourseUnit(object):
+  sentence = "sentence"
+  chunk = "chunk"
 
 INVITATION_MAP = {
     Conference.iclr18:'ICLR.cc/2018/Conference/-/Blind_Submission',
@@ -101,8 +105,8 @@ def build_sid_map(note_map, forum_pairs):
 
   relevant_sids = set()
   for pair in forum_pairs:
-    relevant_sids.add(pair.review)
-    relevant_sids.add(pair.rebuttal)
+    relevant_sids.add(pair.review_sid)
+    relevant_sids.add(pair.rebuttal_sid)
 
   for i, note in enumerate(ordered_notes):
     if note.id in seen_notes:
@@ -132,11 +136,38 @@ def get_forum_pairs(forum_id, note_map):
                 for note in top_children
                 if shorten_author(
                     flatten_signature(note)) == AuthorCategories.REVIEWER]
-  return [Pair(forum=forum_id, review=note.replyto, rebuttal=note.id)
+  return [Pair(forum=forum_id, review_sid=note.replyto, rebuttal_sid=note.id)
       for note in note_map.values()
       if (note.replyto in review_ids
           and shorten_author(
               flatten_signature(note)) == AuthorCategories.AUTHOR)]
+
+
+def get_abstract_texts(forums, or_client, corenlp_client):
+  """From a list of forums, extract review and rebuttal pairs.
+  
+    Args:
+      forums: A list of forum ids (directly from OR API)
+
+    Returns:
+      sid_map: A map from sids to a list of comments they encompass
+
+  """
+  abstracts = []
+  print("Getting abstracts")
+  for forum_id in tqdm(forums):
+    root_getter = [note
+        for note in or_client.get_notes(forum=forum_id)
+        if note.id == forum_id]
+    assert len(root_getter) == 1
+    root, = root_getter
+    abstract_text = root.content["abstract"]
+    abstracts.append(
+        get_tokenized_text(corenlp_client, abstract_text,
+          DiscourseUnit.sentence))
+  return abstracts
+
+
 
 
 def get_review_rebuttal_pairs(forums, or_client):
@@ -162,16 +193,16 @@ def get_review_rebuttal_pairs(forums, or_client):
     forum_sid_map = build_sid_map(note_map, forum_pairs)
     sid_pairs = [pair 
                  for pair in forum_pairs
-                 if (pair.rebuttal in forum_sid_map
-                     and pair.review in forum_sid_map)]
+                 if (pair.rebuttal_sid in forum_sid_map
+                     and pair.review_sid in forum_sid_map)]
 
     for pair in sid_pairs:
-      assert pair.review in forum_sid_map
-      assert pair.rebuttal in forum_sid_map
+      assert pair.review_sid in forum_sid_map
+      assert pair.rebuttal_sid in forum_sid_map
 
     assert (len(sid_pairs) == len(set(sid_pairs))
-            == len(set(x.review for x in sid_pairs))
-            == len(set(x.rebuttal for x in sid_pairs)))
+            == len(set(x.review_sid for x in sid_pairs))
+            == len(set(x.rebuttal_sid for x in sid_pairs)))
 
     sid_map[forum_id] = forum_sid_map
     review_rebuttal_pairs += sid_pairs
@@ -182,15 +213,6 @@ def get_review_rebuttal_pairs(forums, or_client):
         for note in or_client.get_notes(forum=forum_id)} 
     full_sid_map[forum_id] = {k:[id_to_note_map[i] for i in v]
                               for k, v in forum_sid_map.items()}
-
-  #for pair in tqdm(review_rebuttal_pairs):
-  # ` forum_notes = or_client.get_notes(forum=pair.forum)
-  #  assert sorted(forum_notes, key=lambda x:x.tcdate)[0].id == pair.forum
-  #  forum_title = forum_notes[0].content["title"]
-  #  review_author, = [flatten_signature(note)
-  #                    for note in forum_notes
-  #                    if note.id == pair.review]
-
 
   return full_sid_map, review_rebuttal_pairs
 
@@ -229,6 +251,13 @@ def get_tokenized_chunks(corenlp_client, text):
   return [get_tokens_from_tokenized(corenlp_client.annotate(chunk))
           for chunk in chunks]
 
+def get_tokenized_text(corenlp_client, text, discourse_unit):
+  chunks = get_tokenized_chunks(corenlp_client, text)
+  if discourse_unit == DiscourseUnit.sentence:
+    return sum(chunks, [])
+  else:
+    return chunks
+
 
 def get_info(note):
   """Gets relevant note metadata.
@@ -249,20 +278,32 @@ def get_info(note):
 
 
     
-def get_text_from_note_list(note_list, supernote_as_dict, corenlp_client):
-  chunk_offset = 0
-  supernote_chunks = []
+def get_text_from_note_list(note_list, corenlp_client, discourse_unit):
+  supernote_text = []
 
   for subnote in note_list:
     text_type, text, subnote_author = get_info(subnote)
-    supernote_chunks += get_tokenized_chunks(corenlp_client, text)
+    supernote_text += get_tokenized_text(corenlp_client, text, discourse_unit)
 
-  return supernote_chunks
+  return supernote_text
 
-def get_pair_text(unstruct_pairs, unstruct_sid_map, corenlp_client):
-  text_map = {}
-  for pair in unstruct_pairs:
-    for sid in [pair.review, pair.rebuttal]:
-      text_map[sid] = get_text_from_note_list(
-          unstruct_sid_map[pair.forum][sid], None, corenlp_client)
-  return text_map
+Example = collections.namedtuple("Example",
+  "index review_sid rebuttal_sid review_text rebuttal_text labels".split())
+
+
+def get_pair_text(pairs, sid_map, corenlp_client):
+  examples = []
+
+  for i, pair in enumerate(pairs):
+    review_text = get_text_from_note_list(
+        sid_map[pair.forum][pair.review_sid], corenlp_client,
+        DiscourseUnit.sentence)
+    rebuttal_text = get_text_from_note_list(
+        sid_map[pair.forum][pair.rebuttal_sid], corenlp_client,
+        DiscourseUnit.chunk)
+    examples.append(Example(
+      i, pair.review_sid, pair.rebuttal_sid, review_text, rebuttal_text,
+      [None] * len(rebuttal_text)
+      )._asdict())
+
+  return examples
