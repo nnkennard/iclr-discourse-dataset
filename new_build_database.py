@@ -7,11 +7,14 @@ import sys
 
 import new_openreview_lib as norl
 
+random.seed(47)
+
 CORENLP_ANNOTATORS = "ssplit tokenize"
 ForumList = collections.namedtuple("ForumList",
                                    "conference forums url".split())
 
 def get_sampled_forums(conference, client, sample_rate):
+  sample_rate /= 100
   forums = [forum.id
             for forum in get_all_conference_forums(conference, client)]
   if sample_rate == 1:
@@ -33,6 +36,7 @@ def get_pair_text_from_forums(forums, guest_client):
     return norl.get_pair_text(pairs, sid_map, corenlp_client)
 
 def get_abstracts_from_forums(forums, guest_client):
+  print("Getting abstracts")
   with corenlp.CoreNLPClient(
       annotators=CORENLP_ANNOTATORS, output_format='conll') as corenlp_client:
     return norl.get_abstract_texts(forums, guest_client, corenlp_client)
@@ -44,13 +48,14 @@ def get_unstructured(conference, guest_client, output_dir):
   for pair in pair_texts:
     unstructured_text.append(pair["review_text"])
     unstructured_text.append(sum(pair["rebuttal_text"], []))
+  abstracts = get_abstracts_from_forums(forums, guest_client)
   with open(output_dir + "/" + norl.Split.UNSTRUCTURED + ".json", 'w') as f:
     json.dump({
       "conference": conference,
       "split": norl.Split.UNSTRUCTURED,
       "subsplit": norl.SubSplit.TRAIN,
       "review_rebuttal_text": unstructured_text,
-      "abstracts": get_abstracts_from_forums(forums, guest_client)
+      "abstracts": abstracts,
       }, f)
 
 def get_traindev(conference, guest_client, output_dir):

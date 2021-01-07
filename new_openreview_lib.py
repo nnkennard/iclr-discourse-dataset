@@ -1,10 +1,12 @@
 import collections
+import re
 
 from tqdm import tqdm
 
 #CORENLP_ANNOTATORS = "ssplit tokenize"
-NEWLINE_TOKEN = "<br>"
-Pair = collections.namedtuple("Pair", "forum review_sid rebuttal_sid".split())
+#NEWLINE_TOKEN = "<br>"
+Pair = collections.namedtuple("Pair",
+  "forum review_sid rebuttal_sid title review_author".split())
 
 class Conference(object):
   iclr18 = "iclr18"
@@ -129,6 +131,7 @@ def build_sid_map(note_map, forum_pairs):
 
 
 def get_forum_pairs(forum_id, note_map):
+  title = note_map[forum_id].content["title"]
   top_children = [note
                   for note in note_map.values()
                   if note.replyto == forum_id]
@@ -136,9 +139,11 @@ def get_forum_pairs(forum_id, note_map):
                 for note in top_children
                 if shorten_author(
                     flatten_signature(note)) == AuthorCategories.REVIEWER]
-  return [Pair(forum=forum_id, review_sid=note.replyto, rebuttal_sid=note.id)
-      for note in note_map.values()
-      if (note.replyto in review_ids
+  return [Pair(forum=forum_id, review_sid=note.replyto, rebuttal_sid=note.id,
+               title=title,
+               review_author=flatten_signature(note_map[note.replyto]))
+          for note in note_map.values()
+          if (note.replyto in review_ids
           and shorten_author(
               flatten_signature(note)) == AuthorCategories.AUTHOR)]
 
@@ -230,12 +235,15 @@ def get_tokens_from_tokenized(tokenized):
   for line in lines:
     if not line.strip(): # Blank links indicate the end of a sentence
       if current_sentence:
-        sentences.append(current_sentence)
+        sentences.append(["\n" if token == NEWLINE_PLACEHOLDER else token
+                          for token in current_sentence])
       current_sentence = []
     else:
       current_sentence.append(line.split()[TOKEN_INDEX])
   return sentences 
 
+NEWLINE_PLACEHOLDER = "NEWLINE_PLACEHOLDER"
+NEWLINE_PLACEHOLDER_PADDED = " " +  NEWLINE_PLACEHOLDER + " "
 
 def get_tokenized_chunks(corenlp_client, text):
   """Runs tokenization using a CoreNLP client.
@@ -246,8 +254,12 @@ def get_tokenized_chunks(corenlp_client, text):
       A list of chunks in which a chunk is a list of sentences and a sentence is
       a list of tokens.
   """
-  chunks = [chunk if chunk else NEWLINE_TOKEN
-                  for chunk in text.split("\n") ]
+  chunks = [chunk.replace("\n", NEWLINE_PLACEHOLDER_PADDED)
+            for chunk in re.split("\n[\s]*\n", text)]
+  if 'correlation' in text and 'Wu' in text:
+    print(text)
+
+
   return [get_tokens_from_tokenized(corenlp_client.annotate(chunk))
           for chunk in chunks]
 
@@ -288,22 +300,23 @@ def get_text_from_note_list(note_list, corenlp_client, discourse_unit):
   return supernote_text
 
 Example = collections.namedtuple("Example",
-  "index review_sid rebuttal_sid review_text rebuttal_text labels".split())
+  ("index review_sid rebuttal_sid review_text rebuttal_text "
+   "title review_author labels").split())
 
 
 def get_pair_text(pairs, sid_map, corenlp_client):
   examples = []
 
-  for i, pair in enumerate(pairs):
+  print("Processing pairs")
+  for i, pair in tqdm(list(enumerate(pairs))):
     review_text = get_text_from_note_list(
         sid_map[pair.forum][pair.review_sid], corenlp_client,
-        DiscourseUnit.sentence)
+        DiscourseUnit.chunk)
     rebuttal_text = get_text_from_note_list(
         sid_map[pair.forum][pair.rebuttal_sid], corenlp_client,
         DiscourseUnit.chunk)
     examples.append(Example(
       i, pair.review_sid, pair.rebuttal_sid, review_text, rebuttal_text,
-      [None] * len(rebuttal_text)
-      )._asdict())
+      pair.title, pair.review_author, [None] * len(rebuttal_text))._asdict())
 
   return examples
