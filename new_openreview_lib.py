@@ -3,8 +3,6 @@ import re
 
 from tqdm import tqdm
 
-#CORENLP_ANNOTATORS = "ssplit tokenize"
-#NEWLINE_TOKEN = "<br>"
 Pair = collections.namedtuple("Pair",
   "forum review_sid rebuttal_sid title review_author".split())
 
@@ -139,13 +137,25 @@ def get_forum_pairs(forum_id, note_map):
                 for note in top_children
                 if shorten_author(
                     flatten_signature(note)) == AuthorCategories.REVIEWER]
-  return [Pair(forum=forum_id, review_sid=note.replyto, rebuttal_sid=note.id,
-               title=title,
-               review_author=flatten_signature(note_map[note.replyto]))
-          for note in note_map.values()
-          if (note.replyto in review_ids
-          and shorten_author(
-              flatten_signature(note)) == AuthorCategories.AUTHOR)]
+  pairs = []
+  
+  for review_id in review_ids:
+    candidate_responses = [note
+        for note in note_map.values()
+        if note.replyto == review_id and shorten_author(
+              flatten_signature(note)) == AuthorCategories.AUTHOR ]
+    if not candidate_responses:
+      continue
+    else:
+      super_response = candidate_responses[0]
+      pairs.append(
+        Pair(forum=forum_id, title=title,
+             review_sid=review_id,
+             rebuttal_sid=super_response.id,
+             review_author=flatten_signature(
+               note_map[super_response.replyto])))
+
+  return pairs
 
 
 def get_abstract_texts(forums, or_client, corenlp_client):

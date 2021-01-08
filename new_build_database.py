@@ -14,7 +14,6 @@ ForumList = collections.namedtuple("ForumList",
                                    "conference forums url".split())
 
 def get_sampled_forums(conference, client, sample_rate):
-  sample_rate /= 100
   forums = [forum.id
             for forum in get_all_conference_forums(conference, client)]
   if sample_rate == 1:
