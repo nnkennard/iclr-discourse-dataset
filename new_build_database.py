@@ -16,6 +16,7 @@ ForumList = collections.namedtuple("ForumList",
 def get_sampled_forums(conference, client, sample_rate):
   forums = [forum.id
             for forum in get_all_conference_forums(conference, client)]
+  sample_rate /= 100
   if sample_rate == 1:
     pass
   else:
@@ -46,8 +47,9 @@ def get_unstructured(conference, guest_client, output_dir):
   unstructured_text = []
   for pair in pair_texts:
     unstructured_text.append(pair["review_text"])
-    unstructured_text.append(sum(pair["rebuttal_text"], []))
+    unstructured_text.append(pair["rebuttal_text"])
   abstracts = get_abstracts_from_forums(forums, guest_client)
+  #abstracts = []
   with open(output_dir + "/" + norl.Split.UNSTRUCTURED + ".json", 'w') as f:
     json.dump({
       "conference": conference,
@@ -104,7 +106,7 @@ def main():
     norl.Split.TRUETEST: norl.Conference.iclr20
     }
 
-  output_dir = "unlabeled/"
+  output_dir = "mini_unlabeled/"
 
   get_unstructured(
       SPLIT_TO_CONFERENCE[norl.Split.UNSTRUCTURED], guest_client, output_dir)

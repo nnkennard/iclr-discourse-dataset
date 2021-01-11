@@ -22,9 +22,18 @@ class SubSplit(object):
   DEV = "dev"
   TEST = "test"
 
-class DiscourseUnit(object):
-  sentence = "sentence"
-  chunk = "chunk"
+#class DiscourseUnit(object):
+#  sentence = "sentence"
+#  chunk = "chunk"
+
+
+DATSETS = [
+    Split.UNSTRUCTURED,
+    Split.TRAINDEV + "_" + SubSplit.TRAIN,
+    Split.TRAINDEV + "_" + SubSplit.DEV,
+    Split.TRAINDEV + "_" + SubSplit.TEST,
+    Split.TRUETEST,
+    ]
 
 INVITATION_MAP = {
     Conference.iclr18:'ICLR.cc/2018/Conference/-/Blind_Submission',
@@ -127,7 +136,7 @@ def build_sid_map(note_map, forum_pairs):
   return sid_map
 
 
-
+import datetime
 def get_forum_pairs(forum_id, note_map):
   title = note_map[forum_id].content["title"]
   top_children = [note
@@ -140,10 +149,11 @@ def get_forum_pairs(forum_id, note_map):
   pairs = []
   
   for review_id in review_ids:
-    candidate_responses = [note
+    candidate_responses = sorted([note
         for note in note_map.values()
         if note.replyto == review_id and shorten_author(
-              flatten_signature(note)) == AuthorCategories.AUTHOR ]
+              flatten_signature(note)) == AuthorCategories.AUTHOR ], 
+              key=lambda x:x.cdate)
     if not candidate_responses:
       continue
     else:
@@ -178,8 +188,7 @@ def get_abstract_texts(forums, or_client, corenlp_client):
     root, = root_getter
     abstract_text = root.content["abstract"]
     abstracts.append(
-        get_tokenized_text(corenlp_client, abstract_text,
-          DiscourseUnit.sentence))
+        get_tokenized_chunks(corenlp_client, abstract_text))
   return abstracts
 
 
@@ -245,15 +254,14 @@ def get_tokens_from_tokenized(tokenized):
   for line in lines:
     if not line.strip(): # Blank links indicate the end of a sentence
       if current_sentence:
-        sentences.append(["\n" if token == NEWLINE_PLACEHOLDER else token
-                          for token in current_sentence])
+        sentences.append(current_sentence)
       current_sentence = []
     else:
       current_sentence.append(line.split()[TOKEN_INDEX])
   return sentences 
 
-NEWLINE_PLACEHOLDER = "NEWLINE_PLACEHOLDER"
-NEWLINE_PLACEHOLDER_PADDED = " " +  NEWLINE_PLACEHOLDER + " "
+#NEWLINE_PLACEHOLDER = "NEWLINE_PLACEHOLDER"
+#NEWLINE_PLACEHOLDER_PADDED = " " +  NEWLINE_PLACEHOLDER + " "
 
 def get_tokenized_chunks(corenlp_client, text):
   """Runs tokenization using a CoreNLP client.
@@ -264,21 +272,9 @@ def get_tokenized_chunks(corenlp_client, text):
       A list of chunks in which a chunk is a list of sentences and a sentence is
       a list of tokens.
   """
-  chunks = [chunk.replace("\n", NEWLINE_PLACEHOLDER_PADDED)
-            for chunk in re.split("\n[\s]*\n", text)]
-  if 'correlation' in text and 'Wu' in text:
-    print(text)
-
-
-  return [get_tokens_from_tokenized(corenlp_client.annotate(chunk))
-          for chunk in chunks]
-
-def get_tokenized_text(corenlp_client, text, discourse_unit):
-  chunks = get_tokenized_chunks(corenlp_client, text)
-  if discourse_unit == DiscourseUnit.sentence:
-    return sum(chunks, [])
-  else:
-    return chunks
+  chunk_texts = [chunk.strip() for chunk in text.split("\n")]
+  return [get_tokens_from_tokenized(corenlp_client.annotate(chunk_text))
+          for chunk_text in chunk_texts]
 
 
 def get_info(note):
@@ -300,18 +296,35 @@ def get_info(note):
 
 
     
-def get_text_from_note_list(note_list, corenlp_client, discourse_unit):
+def get_text_from_note_list(note_list, corenlp_client):
+  """Given a list of notes, get their text, and tokenize it.
+
+    Args:
+      note_list: A list of note ids
+      corenlp_client: A corenlp client with at least ssplit and tokenize
+
+    Returns:
+      A list of chunks. Each chunk is a list of sentences. Each sentence is a
+      list of tokens.
+
+  """
   supernote_text = []
 
   for subnote in note_list:
     text_type, text, subnote_author = get_info(subnote)
-    supernote_text += get_tokenized_text(corenlp_client, text, discourse_unit)
+    supernote_text += get_tokenized_chunks(corenlp_client, text)
+
+  for chunk in supernote_text:
+    print("Chunk")
+    for sentence in chunk:
+      print("Sentence")
+      print(" ".join(sentence))
 
   return supernote_text
 
 Example = collections.namedtuple("Example",
   ("index review_sid rebuttal_sid review_text rebuttal_text "
-   "title review_author labels").split())
+   "title review_author forum labels").split())
 
 
 def get_pair_text(pairs, sid_map, corenlp_client):
@@ -320,13 +333,11 @@ def get_pair_text(pairs, sid_map, corenlp_client):
   print("Processing pairs")
   for i, pair in tqdm(list(enumerate(pairs))):
     review_text = get_text_from_note_list(
-        sid_map[pair.forum][pair.review_sid], corenlp_client,
-        DiscourseUnit.chunk)
+        sid_map[pair.forum][pair.review_sid], corenlp_client)
     rebuttal_text = get_text_from_note_list(
-        sid_map[pair.forum][pair.rebuttal_sid], corenlp_client,
-        DiscourseUnit.chunk)
+        sid_map[pair.forum][pair.rebuttal_sid], corenlp_client)
     examples.append(Example(
       i, pair.review_sid, pair.rebuttal_sid, review_text, rebuttal_text,
-      pair.title, pair.review_author, [None] * len(rebuttal_text))._asdict())
+      pair.title, pair.review_author, pair.forum, None)._asdict())
 
   return examples
