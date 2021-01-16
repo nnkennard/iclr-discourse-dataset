@@ -5,7 +5,7 @@ import openreview
 import random
 import sys
 
-import new_openreview_lib as norl
+import openreview_lib as orl
 
 random.seed(47)
 
@@ -22,24 +22,24 @@ def get_sampled_forums(conference, client, sample_rate):
   else:
     random.shuffle(forums)
     forums = forums[:int(sample_rate * len(forums))]
-  return ForumList(conference, forums, norl.INVITATION_MAP[conference])
+  return ForumList(conference, forums, orl.INVITATION_MAP[conference])
 
 def get_all_conference_forums(conference, client):
   return list(openreview.tools.iterget_notes(
-    client, invitation=norl.INVITATION_MAP[conference]))
+    client, invitation=orl.INVITATION_MAP[conference]))
 
 def get_pair_text_from_forums(forums, guest_client):
-  sid_map, pairs = norl.get_review_rebuttal_pairs(
+  sid_map, pairs = orl.get_review_rebuttal_pairs(
       forums, guest_client)
   with corenlp.CoreNLPClient(
       annotators=CORENLP_ANNOTATORS, output_format='conll') as corenlp_client:
-    return norl.get_pair_text(pairs, sid_map, corenlp_client)
+    return orl.get_pair_text(pairs, sid_map, corenlp_client)
 
 def get_abstracts_from_forums(forums, guest_client):
   print("Getting abstracts")
   with corenlp.CoreNLPClient(
       annotators=CORENLP_ANNOTATORS, output_format='conll') as corenlp_client:
-    return norl.get_abstract_texts(forums, guest_client, corenlp_client)
+    return orl.get_abstract_texts(forums, guest_client, corenlp_client)
 
 def get_unstructured(conference, guest_client, output_dir):
   forums =  get_sampled_forums(conference, guest_client, 1).forums
@@ -49,12 +49,11 @@ def get_unstructured(conference, guest_client, output_dir):
     unstructured_text.append(pair["review_text"])
     unstructured_text.append(pair["rebuttal_text"])
   abstracts = get_abstracts_from_forums(forums, guest_client)
-  #abstracts = []
-  with open(output_dir + "/" + norl.Split.UNSTRUCTURED + ".json", 'w') as f:
+  with open(output_dir + "/" + orl.Split.UNSTRUCTURED + ".json", 'w') as f:
     json.dump({
       "conference": conference,
-      "split": norl.Split.UNSTRUCTURED,
-      "subsplit": norl.SubSplit.TRAIN,
+      "split": orl.Split.UNSTRUCTURED,
+      "subsplit": orl.SubSplit.TRAIN,
       "review_rebuttal_text": unstructured_text,
       "abstracts": abstracts,
       }, f)
@@ -63,9 +62,9 @@ def get_traindev(conference, guest_client, output_dir):
   forums = get_sampled_forums(conference, guest_client, 1).forums
   random.shuffle(forums)
   offsets = {
-      norl.SubSplit.DEV :(0, int(0.2*len(forums))),
-      norl.SubSplit.TRAIN : (int(0.2*len(forums)), int(0.8*len(forums))),
-      norl.SubSplit.TEST : (int(0.8*len(forums)), int(1.1*len(forums)))
+      orl.SubSplit.DEV :(0, int(0.2*len(forums))),
+      orl.SubSplit.TRAIN : (int(0.2*len(forums)), int(0.8*len(forums))),
+      orl.SubSplit.TEST : (int(0.8*len(forums)), int(1.1*len(forums)))
       }
   sub_split_forum_map = {
       sub_split: forums[start:end]
@@ -74,11 +73,11 @@ def get_traindev(conference, guest_client, output_dir):
   for sub_split, sub_split_forums in sub_split_forum_map.items():
     pair_texts = get_pair_text_from_forums(sub_split_forums, guest_client)
     with open(
-        "".join([output_dir, "/", norl.Split.TRAINDEV, "_",
+        "".join([output_dir, "/", orl.Split.TRAINDEV, "_",
           sub_split, ".json"]), 'w') as f:
       json.dump({
       "conference": conference,
-      "split": norl.Split.TRAINDEV,
+      "split": orl.Split.TRAINDEV,
       "subsplit": sub_split,
       "review_rebuttal_pairs": pair_texts,
       "abstracts": None
@@ -87,11 +86,11 @@ def get_traindev(conference, guest_client, output_dir):
 def get_truetest(conference, guest_client, output_dir):
   forums =  get_sampled_forums(conference, guest_client, 0.2).forums
   pair_texts = get_pair_text_from_forums(forums, guest_client)
-  with open(output_dir + "/" + norl.Split.TRUETEST + ".json", 'w') as f:
+  with open(output_dir + "/" + orl.Split.TRUETEST + ".json", 'w') as f:
     json.dump({
       "conference": conference,
-      "split": norl.Split.UNSTRUCTURED,
-      "subsplit": norl.SubSplit.TEST,
+      "split": orl.Split.TRUETEST,
+      "subsplit": orl.SubSplit.TEST,
       "review_rebuttal_pairs": pair_texts,
       "abstracts": None
       }, f)
@@ -101,19 +100,22 @@ def main():
   guest_client = openreview.Client(baseurl='https://api.openreview.net')
 
   SPLIT_TO_CONFERENCE = {
-    norl.Split.UNSTRUCTURED: norl.Conference.iclr18,
-    norl.Split.TRAINDEV: norl.Conference.iclr19,
-    norl.Split.TRUETEST: norl.Conference.iclr20
+    orl.Split.UNSTRUCTURED: orl.Conference.iclr18,
+    orl.Split.TRAINDEV: orl.Conference.iclr19,
+    orl.Split.TRUETEST: orl.Conference.iclr20
     }
 
   output_dir = "mini_unlabeled/"
 
+  print("&&&&& 1")
   get_unstructured(
-      SPLIT_TO_CONFERENCE[norl.Split.UNSTRUCTURED], guest_client, output_dir)
+      SPLIT_TO_CONFERENCE[orl.Split.UNSTRUCTURED], guest_client, output_dir)
+  print("&&&&& 2")
   get_traindev(
-      SPLIT_TO_CONFERENCE[norl.Split.TRAINDEV], guest_client, output_dir)
+      SPLIT_TO_CONFERENCE[orl.Split.TRAINDEV], guest_client, output_dir)
+  print("&&&&& 3")
   get_truetest(
-      SPLIT_TO_CONFERENCE[norl.Split.TRUETEST], guest_client, output_dir)
+      SPLIT_TO_CONFERENCE[orl.Split.TRUETEST], guest_client, output_dir)
 
 
 if __name__ == "__main__":
