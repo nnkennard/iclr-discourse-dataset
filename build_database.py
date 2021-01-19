@@ -16,19 +16,20 @@ ForumList = collections.namedtuple("ForumList",
 def get_sampled_forums(conference, client, sample_rate):
   forums = [forum.id
             for forum in get_all_conference_forums(conference, client)]
-  sample_rate /= 100
   if sample_rate == 1:
     pass
   else:
     random.shuffle(forums)
     forums = forums[:int(sample_rate * len(forums))]
-  return ForumList(conference, forums, orl.INVITATION_MAP[conference])
+  print("Number of forums:", len(forums))
+  return ForumList(conference, forums[:5], orl.INVITATION_MAP[conference])
 
 def get_all_conference_forums(conference, client):
   return list(openreview.tools.iterget_notes(
     client, invitation=orl.INVITATION_MAP[conference]))
 
 def get_pair_text_from_forums(forums, guest_client):
+  print("Getting pair text from ", len(forums), " forums")
   sid_map, pairs = orl.get_review_rebuttal_pairs(
       forums, guest_client)
   with corenlp.CoreNLPClient(
@@ -105,15 +106,12 @@ def main():
     orl.Split.TRUETEST: orl.Conference.iclr20
     }
 
-  output_dir = "mini_unlabeled/"
+  output_dir = "test_unlabeled/"
 
-  print("&&&&& 1")
   get_unstructured(
       SPLIT_TO_CONFERENCE[orl.Split.UNSTRUCTURED], guest_client, output_dir)
-  print("&&&&& 2")
   get_traindev(
       SPLIT_TO_CONFERENCE[orl.Split.TRAINDEV], guest_client, output_dir)
-  print("&&&&& 3")
   get_truetest(
       SPLIT_TO_CONFERENCE[orl.Split.TRUETEST], guest_client, output_dir)
 

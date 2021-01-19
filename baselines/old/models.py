@@ -11,8 +11,8 @@ from gensim.corpora import Dictionary
 from gensim import similarities
 from gensim.models import TfidfModel
 from rank_bm25 import BM25Okapi
-from sentence_transformers import SentenceTransformer
-from transformers import AutoTokenizer, RobertaForQuestionAnswering
+#from sentence_transformers import SentenceTransformer
+#from transformers import AutoTokenizer, RobertaForQuestionAnswering
 
 
 EMPTY_CHUNK = ["<br>"]
