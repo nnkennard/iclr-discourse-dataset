@@ -117,7 +117,7 @@ def write_datasets_to_file(corpus_map, query_map, data_dir):
 
 Example = collections.namedtuple("Example", "q d1 d2 label".split())
 
-def create_weak_supervision_examples_and_write(results):
+def create_weak_supervision_examples_and_write(results, data_dir):
   example_map = {}
   for dataset, dataset_results in results.items():
     example_tuples = []
@@ -136,10 +136,13 @@ def create_weak_supervision_examples_and_write(results):
 
 def main():
   data_dir = "../test_unlabeled/"
+  print("Gathering datasets")
   corpus_map, query_map = gather_datasets(data_dir)
   write_datasets_to_file(corpus_map, query_map, data_dir)
+  print("Gathering BM25 scores")
   results = score_datasets_and_write(corpus_map, query_map, data_dir)
-  examples = create_weak_supervision_examples_and_write(results)
+  print("Building examples")
+  examples = create_weak_supervision_examples_and_write(results, data_dir)
   
 if __name__ == "__main__":
   main()
