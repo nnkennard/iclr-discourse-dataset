@@ -14,7 +14,9 @@ import openreview_lib as orl
 
 
 Document = collections.namedtuple("Document",
-"key tokens preprocessed_tokens".split())
+                                  "key tokens preprocessed_tokens".split())
+TextList = collections.namedtuple("TextList", "key_list texts".split())
+Result = collections.namedtuple("Result", "queries corpus scores".split())
 
 STEMMER = PorterStemmer()
 STOPWORDS = stopwords.words('english')
@@ -23,6 +25,19 @@ def preprocess_sentence(sentence_tokens):
   return [STEMMER.stem(word).lower()
       for word in sentence_tokens
       if word.lower() not in STOPWORDS]
+
+
+def get_top_k_indices(array, k):
+  if k > len(array):
+    top_k_list(enumerate(array))
+  else:
+    neg_k = 0 - k
+    indices = np.argpartition(array, neg_k)[neg_k:]
+    top_k_list = [(i, array[i]) for i in indices]
+  return list(
+      reversed(sorted(
+       top_k_list , key=lambda x:x[1])))
+
 
 
 def documents_from_chunks(chunks, key_prefix):
@@ -71,10 +86,6 @@ def gather_datasets(data_dir):
 
 PARTITION_K = 1000
 
-TextList = collections.namedtuple("TextList", ["key_list", "texts"])
-Result = collections.namedtuple("Result", "queries corpus scores".split())
-
-
 def score_dataset(queries, documents):
   model = BM25Okapi(documents.texts)
   scores = []
@@ -115,19 +126,6 @@ def score_datasets(document_map, data_dir):
       results[dataset] = Result(query_obj._asdict(), corpus_obj._asdict(),
           dataset_scores)
   return results
-
-
-
-def get_top_k_indices(array, k):
-  if k > len(array):
-    top_k_list(enumerate(array))
-  else:
-    neg_k = 0 - k
-    indices = np.argpartition(array, neg_k)[neg_k:]
-    top_k_list = [(i, array[i]) for i in indices]
-  return list(
-      reversed(sorted(
-       top_k_list , key=lambda x:x[1])))
 
 def main():
   data_dir = "../test_unlabeled/"
