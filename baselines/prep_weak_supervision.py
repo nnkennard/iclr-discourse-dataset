@@ -71,54 +71,69 @@ def gather_datasets(data_dir):
 
 PARTITION_K = 1000
 
-TextList = collections.namedtuple("TextList", "key_list", "texts")
+TextList = collections.namedtuple("TextList", ["key_list", "texts"])
+Result = collections.namedtuple("Result", "queries corpus scores".split())
+
+
+def score_dataset(queries, documents):
+  model = BM25Okapi(documents.texts)
+  scores = []
+  for query in tqdm(queries.texts):
+    query_scores = model.get_scores(query).tolist()
+    scores.append(get_top_k_indices(query_scores, PARTITION_K))
+  return scores
+
+
+def build_text_list(document_map):
+  key_list = []
+  texts = []
+  for k in sorted(document_map.keys()):
+    key_list.append(k)
+    texts.append(document_map[k])
+  return TextList(key_list, texts)
+
 
 def score_datasets(document_map, data_dir):
+  results = {}
   for dataset in orl.DATASETS:
-    print(dataset)
     if dataset == orl.Split.UNSTRUCTURED:
       continue
     else:
       documents = document_map[dataset]
-      corpus_keys = []
-      corpus = []
-      query_keys = []
-      queries = []
-      scores = []
+      corpus = {}
+      queries = {}
       for document in documents:
         key = document["key"]
         if 'rebuttal' in key:
-          query_keys.append(key)
-          queries.append(document["preprocessed_tokens"])
+          queries[key] = document["preprocessed_tokens"]
         else:
           assert 'review' in key
-          corpus_keys.append(key)
-          corpus.append(document["preprocessed_tokens"])
+          corpus[key] = document["preprocessed_tokens"]
+      query_obj = build_text_list(queries)
+      corpus_obj = build_text_list(corpus)
+      dataset_scores = score_dataset(query_obj, corpus_obj)
+      results[dataset] = Result(query_obj._asdict(), corpus_obj._asdict(),
+          dataset_scores)
+  return results
 
-      query_keys = sorted(query_keys)
-      model = BM25Okapi(corpus)
-      for query in tqdm(query_keys):
-        query_scores = model.get_scores(query).tolist()
-        scores.append(get_top_k_indices(query_scores, PARTITION_K))
-      with open(data_dir + "/" + dataset + "_bm25_scores_mini.json", 'w') as f:
-        results = {"corpus_keys": corpus_keys,
-                   "query_keys": query_keys,
-                   "scores": scores}
-        return results
+
 
 def get_top_k_indices(array, k):
   if k > len(array):
-    return list(enumerate(array))
-  neg_k = 0 - k
-  indices = np.argpartition(array, neg_k)[neg_k:]
-  return [(i, array[i]) for i in indices]
+    top_k_list(enumerate(array))
+  else:
+    neg_k = 0 - k
+    indices = np.argpartition(array, neg_k)[neg_k:]
+    top_k_list = [(i, array[i]) for i in indices]
+  return list(
+      reversed(sorted(
+       top_k_list , key=lambda x:x[1])))
 
 def main():
   data_dir = "../test_unlabeled/"
   document_map = gather_datasets(data_dir)
-  print(len(document_map["truetest"][0]))
-  bm25_scores = score_documents(document_map, data_dir)
-
+  bm25_scores = score_datasets(document_map, data_dir)
+  
 
 
 
