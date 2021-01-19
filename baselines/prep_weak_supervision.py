@@ -71,8 +71,9 @@ def gather_datasets(data_dir):
 
 PARTITION_K = 1000
 
+TextList = collections.namedtuple("TextList", "key_list", "texts")
 
-def score_documents(document_map, data_dir):
+def score_datasets(document_map, data_dir):
   for dataset in orl.DATASETS:
     print(dataset)
     if dataset == orl.Split.UNSTRUCTURED:
@@ -115,7 +116,7 @@ def get_top_k_indices(array, k):
 def main():
   data_dir = "../test_unlabeled/"
   document_map = gather_datasets(data_dir)
-  print(document_map["truetest"][0])
+  print(len(document_map["truetest"][0]))
   bm25_scores = score_documents(document_map, data_dir)
 
 
