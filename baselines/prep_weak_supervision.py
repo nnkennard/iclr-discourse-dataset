@@ -59,7 +59,6 @@ def gather_datasets(data_dir):
   document_map = {}
 
   for dataset in orl.DATASETS:
-    print("*", dataset)
     with open(data_dir + dataset + ".json", 'r') as f:
       obj = json.load(f)
     if dataset == orl.Split.UNSTRUCTURED:
@@ -107,12 +106,10 @@ def score_documents(document_map, data_dir):
         return results
 
 def get_top_k_indices(array, k):
-  print("%%", k, len(array))
   if k > len(array):
     return list(enumerate(array))
   neg_k = 0 - k
   indices = np.argpartition(array, neg_k)[neg_k:]
-  print(len(indices))
   return [(i, array[i]) for i in indices]
 
 def main():
