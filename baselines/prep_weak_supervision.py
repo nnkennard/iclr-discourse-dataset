@@ -76,8 +76,8 @@ def gather_datasets(data_dir):
         "_review_" + str(pair["index"]))
         queries += documents_from_chunks(pair["rebuttal_text"], key_prefix +
         "_rebuttal_" + str(pair["index"]))
-      query_map[dataset] = queries
-      corpus_map[dataset] = corpus
+      query_map[dataset] = list(sorted(queries, key=lambda x:x.key))
+      corpus_map[dataset] = list(sorted(corpus, key=lambda x:x.key))
 
   assert len(corpus_map) == len(query_map) == 4
   return corpus_map, query_map
@@ -93,46 +93,53 @@ def score_dataset(corpus, queries):
   return scores
 
 
-def build_text_list(document_map):
-  key_list = []
-  texts = []
-  for k in sorted(document_map.keys()):
-    key_list.append(k)
-    texts.append(document_map[k])
-  return TextList(key_list, texts)
-
-
-def score_datasets(corpus_map, query_map, data_dir):
+def score_datasets_and_write(corpus_map, query_map, data_dir):
   results = {}
   for dataset in orl.DATASETS:
     if dataset == orl.Split.UNSTRUCTURED:
       continue
     else:
       results[dataset] = score_dataset(corpus_map[dataset], query_map[dataset])
+  for dataset, scores in results.items():
+    with open(data_dir + "/" + dataset +"_scores.json", 'w') as f:
+      json.dump(scores, f)
   return results
 
 
 def write_datasets_to_file(corpus_map, query_map, data_dir):
   for dataset, corpus in corpus_map.items():
-    sorted_queries = [q._asdict()
-          for q in sorted(query_map[dataset], key=lambda x:x.key)]
-    sorted_corpus = [d._asdict() for d in sorted(corpus, key=lambda x:x.key)]
+    queries = query_map[dataset]
     with open(data_dir + "/" + dataset +"_text.json", 'w') as f:
       json.dump({
-        "corpus": sorted_corpus,
-        "queries": sorted_queries
+        "corpus": corpus,
+        "queries": queries
         }, f)
+
+Example = collections.namedtuple("Example", "q d1 d2 label".split())
+
+def create_weak_supervision_examples_and_write(results):
+  example_map = {}
+  for dataset, dataset_results in results.items():
+    example_tuples = []
+    for query_i, scores in enumerate(tqdm(dataset_results)):
+      for j, (doc_1_i, score_1) in enumerate(scores):
+        for doc_2_i, score_2 in scores[j+1:]:
+          if doc_2_i == doc_1_i:
+            dsds
+          example_tuples.append(Example(query_i, doc_1_i, doc_2_i, 0))
+          example_tuples.append(Example(query_i, doc_2_i, doc_1_i, 1))
+    with open(data_dir + "/" + dataset +"_examples.json", 'w') as f:
+      json.dump(example_tuples, f)
+    example_map[dataset] = example_tuples
+  return example_map
+  
 
 def main():
   data_dir = "../test_unlabeled/"
   corpus_map, query_map = gather_datasets(data_dir)
-  # Dump datasets to file
   write_datasets_to_file(corpus_map, query_map, data_dir)
-  bm25_scores = score_datasets(corpus_map, query_map, data_dir)
-  for dataset, scores in bm25_scores.items():
-    with open(data_dir + "/" + dataset +"_scores.json", 'w') as f:
-      json.dump(scores, f)
-
-
+  results = score_datasets_and_write(corpus_map, query_map, data_dir)
+  examples = create_weak_supervision_examples_and_write(results)
+  
 if __name__ == "__main__":
   main()
