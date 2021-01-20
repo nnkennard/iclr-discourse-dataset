@@ -9,6 +9,7 @@ python training_nli.py
 OR
 python training_nli.py pretrained_transformer_model_name
 """
+
 from torch.utils.data import DataLoader
 import math
 from sentence_transformers import models, losses
@@ -56,48 +57,38 @@ def build_model(num_labels):
     num_labels=num_labels)
   return model, train_loss
 
-def get_train_dataloader(nli_dataset_path, train_batch_size):
-  # Read the AllNLI.tsv.gz file and create the training dataset
-  logging.info("Read AllNLI train dataset")
 
+def read_dataset(dataset_path, split):
   label2int = {"contradiction": 0, "entailment": 1, "neutral": 2}
-  train_samples = []
-  with gzip.open(nli_dataset_path, 'rt', encoding='utf8') as fIn:
+  samples = []
+  with gzip.open(dataset_path, 'rt', encoding='utf8') as fIn:
       reader = csv.DictReader(fIn, delimiter='\t', quoting=csv.QUOTE_NONE)
       for row in reader:
-          if row['split'] == 'train':
+          if row['split'] == split:
+            if 'label' in row:
               label_id = label2int[row['label']]
-              train_samples.append(InputExample(texts=[row['sentence1'], row['sentence2']], label=label_id))
-  train_samples = train_samples[:10]
+            else:
+              label_id = float(row['score']) / 5.0 #Normalize score to range 0 ... 1
+            samples.append(InputExample(texts=[row['sentence1'], row['sentence2']], label=label_id))
+  return samples[:10]
+
+def get_train_dataloader(nli_dataset_path, train_batch_size):
+  logging.info("Read AllNLI train dataset")
+  train_samples = read_dataset(nli_dataset_path, "train")
   return DataLoader(train_samples, shuffle=True, batch_size=train_batch_size)
 
 
 def build_dev_evaluator(sts_dataset_path, train_batch_size):
- 
-  #Read STSbenchmark dataset and use it as development set
   logging.info("Read STSbenchmark dev dataset")
-  dev_samples = []
-  with gzip.open(sts_dataset_path, 'rt', encoding='utf8') as fIn:
-      reader = csv.DictReader(fIn, delimiter='\t', quoting=csv.QUOTE_NONE)
-      for row in reader:
-          if row['split'] == 'dev':
-              score = float(row['score']) / 5.0 #Normalize score to range 0 ... 1
-              dev_samples.append(InputExample(texts=[row['sentence1'], row['sentence2']], label=score))
-
+  dev_samples = read_dataset(sts_dataset_path, "dev")
   return EmbeddingSimilarityEvaluator.from_input_examples(dev_samples, batch_size=train_batch_size, name='sts-dev')
 
 
 def test(model_save_path, sts_dataset_path, train_batch_size):
-  test_samples = []
-  with gzip.open(sts_dataset_path, 'rt', encoding='utf8') as fIn:
-      reader = csv.DictReader(fIn, delimiter='\t', quoting=csv.QUOTE_NONE)
-      for row in reader:
-          if row['split'] == 'test':
-              score = float(row['score']) / 5.0 #Normalize score to range 0 ... 1
-              test_samples.append(InputExample(texts=[row['sentence1'], row['sentence2']], label=score))
-
+  test_samples = read_dataset(sts_dataset_path, "test")
   model = SentenceTransformer(model_save_path)
-  test_evaluator = EmbeddingSimilarityEvaluator.from_input_examples(test_samples, batch_size=train_batch_size, name='sts-test')
+  test_evaluator = EmbeddingSimilarityEvaluator.from_input_examples(
+              test_samples, batch_size=train_batch_size, name='sts-test')
   test_evaluator(model, output_path=model_save_path)
 
 
@@ -126,9 +117,6 @@ def main():
             )
 
   test(model_save_path, sts_dataset_path, train_batch_size)
-
-
-
 
 
 if __name__ == "__main__":
