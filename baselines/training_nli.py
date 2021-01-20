@@ -22,22 +22,15 @@ import os
 import gzip
 import csv
 
-def prepare(nli_dataset_path, sts_dataset_path):
-  #### Just some code to print debug information to stdout
+import new_softmax_loss
+
+from tqdm import tqdm
+
+def prepare():
   logging.basicConfig(format='%(asctime)s - %(message)s',
                       datefmt='%Y-%m-%d %H:%M:%S',
                       level=logging.INFO,
                       handlers=[LoggingHandler()])
-  #### /print debug information to stdout
-
-  #Check if dataset exsist. If not, download and extract  it
-
-  if not os.path.exists(nli_dataset_path):
-      util.http_get('https://sbert.net/datasets/AllNLI.tsv.gz', nli_dataset_path)
-
-  if not os.path.exists(sts_dataset_path):
-      util.http_get('https://sbert.net/datasets/stsbenchmark.tsv.gz', sts_dataset_path)
-
 
 def build_model(num_labels):
   model_name = 'bert-base-uncased'
@@ -52,25 +45,22 @@ def build_model(num_labels):
                                  pooling_mode_max_tokens=False)
 
   model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
-  train_loss = losses.SoftmaxLoss(model=model,
+  train_loss = new_softmax_loss.SoftmaxLoss(model=model,
     sentence_embedding_dimension=model.get_sentence_embedding_dimension(),
-    num_labels=num_labels)
+    num_labels=num_labels, num_vectors=3)
   return model, train_loss
 
 
 def read_dataset(dataset_path, split):
-  label2int = {"contradiction": 0, "entailment": 1, "neutral": 2}
   samples = []
-  with gzip.open(dataset_path, 'rt', encoding='utf8') as fIn:
-      reader = csv.DictReader(fIn, delimiter='\t', quoting=csv.QUOTE_NONE)
-      for row in reader:
-          if row['split'] == split:
-            if 'label' in row:
-              label_id = label2int[row['label']]
-            else:
-              label_id = float(row['score']) / 5.0 #Normalize score to range 0 ... 1
-            samples.append(InputExample(texts=[row['sentence1'], row['sentence2']], label=label_id))
-  return samples[:10]
+  with open(dataset_path, 'r') as fIn:
+    for line in tqdm(fIn):
+      line_split, query, doc1, doc2, label = line.strip().split('\t')
+      if line_split == split:
+        samples.append(InputExample(texts=[query, doc1, doc2],
+          label=int(label)))
+        if len(samples) == 10000:
+          return samples
 
 def get_train_dataloader(nli_dataset_path, train_batch_size):
   logging.info("Read AllNLI train dataset")
@@ -93,14 +83,13 @@ def test(model_save_path, sts_dataset_path, train_batch_size):
 
 
 def main():
-  nli_dataset_path = 'datasets/AllNLI.tsv.gz'
-  sts_dataset_path = 'datasets/stsbenchmark.tsv.gz'
-  prepare(nli_dataset_path, sts_dataset_path)
-  model, train_loss = build_model(num_labels=3)
+  dataset_path = '../test_unlabeled/examples.tsv'
+  prepare()
+  model, train_loss = build_model(num_labels=2)
 
   train_batch_size = 16
-  train_dataloader = get_train_dataloader(nli_dataset_path, train_batch_size)
-  dev_evaluator = build_dev_evaluator(sts_dataset_path, train_batch_size)
+  train_dataloader = get_train_dataloader(dataset_path, train_batch_size)
+  dev_evaluator = build_dev_evaluator(dataset_path, train_batch_size)
 
   # Training configuration
   num_epochs = 1
@@ -115,8 +104,6 @@ def main():
             warmup_steps=warmup_steps,
             output_path=model_save_path
             )
-
-  test(model_save_path, sts_dataset_path, train_batch_size)
 
 
 if __name__ == "__main__":

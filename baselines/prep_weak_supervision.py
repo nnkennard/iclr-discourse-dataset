@@ -115,7 +115,37 @@ def write_datasets_to_file(corpus_map, query_map, data_dir):
         "queries": queries
         }, f)
 
-Example = collections.namedtuple("Example", "q d1 d2 label".split())
+
+def create_example_lines(split, corpus, queries, query_i, doc_1_i, doc_2_i):
+  return "".join([
+      "\t".join([split,
+      " ".join(queries[query_i].tokens),
+      " ".join(corpus[doc_1_i].tokens),
+      " ".join(corpus[doc_2_i].tokens), "0"]), "\n",
+      "\t".join([split,
+      " ".join(queries[query_i].tokens),
+      " ".join(corpus[doc_2_i].tokens),
+      " ".join(corpus[doc_1_i].tokens), "1"]), "\n"])
+
+def create_weak_supervision_tsv(results, data_dir, corpus_map, query_map):
+  example_map = {}
+  with open(data_dir + "/examples.tsv", 'w') as f:
+    for dataset, dataset_results in results.items():
+      if dataset == "traindev_train":
+        split = 'train'
+      elif dataset == "traindev_dev":
+        split = 'dev'
+      else:
+        continue
+      example_tuples = []
+      corpus = corpus_map[dataset]
+      queries = query_map[dataset]
+      print("Creating tsv of ", dataset)
+      for query_i, scores in enumerate(tqdm(dataset_results)):
+        for j, (doc_1_i, score_1) in enumerate(scores):
+          for doc_2_i, score_2 in scores[j+1:]:
+            f.write(create_example_lines(split, corpus, queries, query_i, doc_1_i, doc_2_i))
+
 
 def create_weak_supervision_examples_and_write(results, data_dir):
   example_map = {}
@@ -142,7 +172,7 @@ def main():
   print("Gathering BM25 scores")
   results = score_datasets_and_write(corpus_map, query_map, data_dir)
   print("Building examples")
-  examples = create_weak_supervision_examples_and_write(results, data_dir)
+  examples = create_weak_supervision_tsv(results, data_dir, corpus_map, query_map)
   
 if __name__ == "__main__":
   main()

@@ -22,7 +22,7 @@ def get_sampled_forums(conference, client, sample_rate):
     random.shuffle(forums)
     forums = forums[:int(sample_rate * len(forums))]
   print("Number of forums:", len(forums))
-  return ForumList(conference, forums[:5], orl.INVITATION_MAP[conference])
+  return ForumList(conference, forums, orl.INVITATION_MAP[conference])
 
 def get_all_conference_forums(conference, client):
   return list(openreview.tools.iterget_notes(
@@ -106,7 +106,7 @@ def main():
     orl.Split.TRUETEST: orl.Conference.iclr20
     }
 
-  output_dir = "test_unlabeled/"
+  output_dir = "unlabeled/"
 
   get_unstructured(
       SPLIT_TO_CONFERENCE[orl.Split.UNSTRUCTURED], guest_client, output_dir)
