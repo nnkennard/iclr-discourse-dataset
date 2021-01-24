@@ -71,7 +71,7 @@ def gather_datasets(data_dir):
       key_prefix = get_key_prefix(obj)
       queries = []
       corpus = []
-      for pair in obj["review_rebuttal_pairs"][:100]:
+      for pair in obj["review_rebuttal_pairs"]:
         corpus += documents_from_chunks(pair["review_text"], key_prefix +
         "_review_" + str(pair["index"]))
         queries += documents_from_chunks(pair["rebuttal_text"], key_prefix +
@@ -82,7 +82,7 @@ def gather_datasets(data_dir):
   assert len(corpus_map) == len(query_map) == 4
   return corpus_map, query_map
 
-PARTITION_K = 1000
+PARTITION_K = 20
 
 def score_dataset(corpus, queries):
   model = BM25Okapi([doc.preprocessed_tokens for doc in corpus])
@@ -100,9 +100,9 @@ def score_datasets_and_write(corpus_map, query_map, data_dir):
       continue
     else:
       results[dataset] = score_dataset(corpus_map[dataset], query_map[dataset])
-  for dataset, scores in results.items():
-    with open(data_dir + "/" + dataset +"_scores.json", 'w') as f:
-      json.dump(scores, f)
+  #for dataset, scores in results.items():
+  #  with open(data_dir + "/" + dataset +"_scores.json", 'w') as f:
+  #    json.dump(scores, f)
   return results
 
 
@@ -140,7 +140,6 @@ def create_weak_supervision_tsv(results, data_dir, corpus_map, query_map):
       example_tuples = []
       corpus = corpus_map[dataset]
       queries = query_map[dataset]
-      print("Creating tsv of ", dataset)
       for query_i, scores in enumerate(tqdm(dataset_results)):
         for j, (doc_1_i, score_1) in enumerate(scores):
           for doc_2_i, score_2 in scores[j+1:]:
@@ -162,17 +161,47 @@ def create_weak_supervision_examples_and_write(results, data_dir):
       json.dump(example_tuples, f)
     example_map[dataset] = example_tuples
   return example_map
+
+def mean(l):
+  if not l:
+    return None
+  return sum(l)/len(l)
+
+def mean_reciprocal(l):
+  return mean([1/i for i in l])
+
+def calculate_mrr(results, query_map, corpus_map):
+  for dataset, dataset_result in results.items():
+    queries = query_map[dataset]
+    corpus = corpus_map[dataset]
+    for query_i, result in enumerate(dataset_result):
+      query = queries[query_i]
+      search_prefix = "_".join(query.key.replace("rebuttal",
+        "review").split("_")[:4])
+      relevant_doc_indices = [
+          i for i, doc in enumerate(corpus) if doc.key.startswith(search_prefix)
+          ]
+      ranks = []
+      for doc_rank, (doc_idx, score) in enumerate(result):
+        if doc_idx in relevant_doc_indices:
+          ranks.append(1+doc_rank)
+      if not ranks:
+        print("\t".join([query.key, "none_retrieved"]))
+      else:
+        print(
+          "\t".join([str(i) for i in [
+          query.key, mean_reciprocal(ranks), min(ranks), max(ranks),
+          len(ranks) * 100 / len(relevant_doc_indices)
+            ]]) )
   
 
 def main():
-  data_dir = "../test_unlabeled/"
-  print("Gathering datasets")
+  data_dir = "../unlabeled/"
   corpus_map, query_map = gather_datasets(data_dir)
-  write_datasets_to_file(corpus_map, query_map, data_dir)
-  print("Gathering BM25 scores")
+  #write_datasets_to_file(corpus_map, query_map, data_dir)
   results = score_datasets_and_write(corpus_map, query_map, data_dir)
-  print("Building examples")
-  examples = create_weak_supervision_tsv(results, data_dir, corpus_map, query_map)
+  calculate_mrr(results, query_map, corpus_map)
+  #examples = create_weak_supervision_tsv(results, data_dir, corpus_map, query_map)
   
 if __name__ == "__main__":
   main()
