@@ -59,8 +59,7 @@ def read_dataset(dataset_path, split):
       if line_split == split:
         samples.append(InputExample(texts=[query, doc1, doc2],
           label=int(label)))
-        if len(samples) == 10000:
-          return samples
+
 
 def get_train_dataloader(nli_dataset_path, train_batch_size):
   logging.info("Read AllNLI train dataset")
@@ -71,7 +70,7 @@ def get_train_dataloader(nli_dataset_path, train_batch_size):
 def build_dev_evaluator(sts_dataset_path, train_batch_size):
   logging.info("Read STSbenchmark dev dataset")
   dev_samples = read_dataset(sts_dataset_path, "dev")
-  return EmbeddingSimilarityEvaluator.from_input_examples(dev_samples, batch_size=train_batch_size, name='sts-dev')
+  return SameOldEvaluator.from_input_examples(dev_samples, batch_size=train_batch_size, name='sts-dev')
 
 
 def test(model_save_path, sts_dataset_path, train_batch_size):

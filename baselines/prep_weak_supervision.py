@@ -1,6 +1,7 @@
 import collections
 import json
 import numpy as np
+import random
 import sys
 
 import openreview_lib as orl
@@ -11,6 +12,8 @@ from rank_bm25 import BM25Okapi
 from tqdm import tqdm
 
 import openreview_lib as orl
+
+random.seed(34)
 
 
 Document = collections.namedtuple("Document",
@@ -83,14 +86,28 @@ def gather_datasets(data_dir):
   return corpus_map, query_map
 
 PARTITION_K = 20
+NUM_SAMPLES = 20
 
 def score_dataset(corpus, queries):
   model = BM25Okapi([doc.preprocessed_tokens for doc in corpus])
   scores = []
   for query in tqdm(queries):
+    search_prefix = "_".join(query.key.replace("rebuttal",
+        "review").split("_")[:4])
+    relevant_doc_indices = [
+          i for i, doc in enumerate(corpus) if doc.key.startswith(search_prefix)
+          ]
+
     query_scores = model.get_scores(query.preprocessed_tokens).tolist()
-    scores.append(get_top_k_indices(query_scores, PARTITION_K))
+    scores.append(sample_from_scores(query_scores, relevant_doc_indices,
+      NUM_SAMPLES))
   return scores
+
+def sample_from_scores(query_scores, relevant_doc_indices, num_samples):
+  sample_indices = random.sample(list(range(len(query_scores))), num_samples)
+  return [ (i, query_scores[i]) for i in sample_indices
+      ] + [(j, query_scores[j])  for j in relevant_doc_indices
+          ]
 
 
 def score_datasets_and_write(corpus_map, query_map, data_dir):
@@ -198,10 +215,10 @@ def calculate_mrr(results, query_map, corpus_map):
 def main():
   data_dir = "../unlabeled/"
   corpus_map, query_map = gather_datasets(data_dir)
-  #write_datasets_to_file(corpus_map, query_map, data_dir)
+  write_datasets_to_file(corpus_map, query_map, data_dir)
   results = score_datasets_and_write(corpus_map, query_map, data_dir)
   calculate_mrr(results, query_map, corpus_map)
-  #examples = create_weak_supervision_tsv(results, data_dir, corpus_map, query_map)
+  examples = create_weak_supervision_tsv(results, data_dir, corpus_map, query_map)
   
 if __name__ == "__main__":
   main()
