@@ -29,19 +29,6 @@ def preprocess_sentence(sentence_tokens):
       if word.lower() not in STOPWORDS]
 
 
-def get_top_k_indices(array, k):
-  if k > len(array):
-    top_k_list = list(enumerate(array))
-  else:
-    neg_k = 0 - k
-    indices = np.argpartition(array, neg_k)[neg_k:]
-    top_k_list = [(i, array[i]) for i in indices]
-  return list(
-      reversed(sorted(
-       top_k_list , key=lambda x:x[1])))
-
-
-
 def documents_from_chunks(chunks, key_prefix):
   sentences = []
   for chunk in chunks:
@@ -74,7 +61,7 @@ def gather_datasets(data_dir):
       key_prefix = get_key_prefix(obj)
       queries = []
       corpus = []
-      for pair in obj["review_rebuttal_pairs"]:
+      for pair in obj["review_rebuttal_pairs"][:10]:
         corpus += documents_from_chunks(pair["review_text"], key_prefix +
         "_review_" + str(pair["index"]))
         queries += documents_from_chunks(pair["rebuttal_text"], key_prefix +
@@ -85,7 +72,6 @@ def gather_datasets(data_dir):
   assert len(corpus_map) == len(query_map) == 4
   return corpus_map, query_map
 
-PARTITION_K = 20
 NUM_SAMPLES = 20
 
 def score_dataset(corpus, queries):
@@ -105,9 +91,8 @@ def score_dataset(corpus, queries):
 
 def sample_from_scores(query_scores, relevant_doc_indices, num_samples):
   sample_indices = random.sample(list(range(len(query_scores))), num_samples)
-  return [ (i, query_scores[i]) for i in sample_indices
-      ] + [(j, query_scores[j])  for j in relevant_doc_indices
-          ]
+  all_indices = set(sample_indices + relevant_doc_indices)
+  return sorted([(i, query_scores[i]) for i in all_indices], key=lambda x:x[1])
 
 
 def score_datasets_and_write(corpus_map, query_map, data_dir):
@@ -117,9 +102,6 @@ def score_datasets_and_write(corpus_map, query_map, data_dir):
       continue
     else:
       results[dataset] = score_dataset(corpus_map[dataset], query_map[dataset])
-  #for dataset, scores in results.items():
-  #  with open(data_dir + "/" + dataset +"_scores.json", 'w') as f:
-  #    json.dump(scores, f)
   return results
 
 
@@ -143,6 +125,7 @@ def create_example_lines(split, corpus, queries, query_i, doc_1_i, doc_2_i):
       " ".join(queries[query_i].tokens),
       " ".join(corpus[doc_2_i].tokens),
       " ".join(corpus[doc_1_i].tokens), "1"]), "\n"])
+
 
 def create_weak_supervision_tsv(results, data_dir, corpus_map, query_map):
   example_map = {}
@@ -179,46 +162,14 @@ def create_weak_supervision_examples_and_write(results, data_dir):
     example_map[dataset] = example_tuples
   return example_map
 
-def mean(l):
-  if not l:
-    return None
-  return sum(l)/len(l)
-
-def mean_reciprocal(l):
-  return mean([1/i for i in l])
-
-def calculate_mrr(results, query_map, corpus_map):
-  for dataset, dataset_result in results.items():
-    queries = query_map[dataset]
-    corpus = corpus_map[dataset]
-    for query_i, result in enumerate(dataset_result):
-      query = queries[query_i]
-      search_prefix = "_".join(query.key.replace("rebuttal",
-        "review").split("_")[:4])
-      relevant_doc_indices = [
-          i for i, doc in enumerate(corpus) if doc.key.startswith(search_prefix)
-          ]
-      ranks = []
-      for doc_rank, (doc_idx, score) in enumerate(result):
-        if doc_idx in relevant_doc_indices:
-          ranks.append(1+doc_rank)
-      if not ranks:
-        print("\t".join([query.key, "none_retrieved"]))
-      else:
-        print(
-          "\t".join([str(i) for i in [
-          query.key, mean_reciprocal(ranks), min(ranks), max(ranks),
-          len(ranks) * 100 / len(relevant_doc_indices)
-            ]]) )
-  
 
 def main():
   data_dir = "../unlabeled/"
   corpus_map, query_map = gather_datasets(data_dir)
   write_datasets_to_file(corpus_map, query_map, data_dir)
   results = score_datasets_and_write(corpus_map, query_map, data_dir)
-  calculate_mrr(results, query_map, corpus_map)
-  examples = create_weak_supervision_tsv(results, data_dir, corpus_map, query_map)
+  examples = create_weak_supervision_tsv(
+      results, data_dir, corpus_map, query_map)
   
 if __name__ == "__main__":
   main()
