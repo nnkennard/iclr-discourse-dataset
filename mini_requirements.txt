@@ -1,0 +1,4 @@
+corenlp-protobuf==3.8.0
+openreview-py==1.0.17
+stanford-corenlp==3.9.2
+tqdm==4.56.0
