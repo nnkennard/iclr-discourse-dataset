@@ -10,24 +10,6 @@ import openreview_lib as orl
 random.seed(47)
 
 CORENLP_ANNOTATORS = "ssplit tokenize"
-ForumList = collections.namedtuple("ForumList",
-                                   "conference forums url".split())
-
-def get_sampled_forums(conference, client, sample_rate):
-  forums = [forum.id
-            for forum in get_all_conference_forums(conference, client)]
-  if sample_rate == 1:
-    pass
-  else:
-    random.shuffle(forums)
-    forums = forums[:int(sample_rate * len(forums))]
-  print("Number of forums:", len(forums))
-  return ForumList(conference, forums, orl.INVITATION_MAP[conference])
-
-def get_all_conference_forums(conference, client):
-  return list(openreview.tools.iterget_notes(
-    client, invitation=orl.INVITATION_MAP[conference]))
-
 def get_pair_text_from_forums(forums, guest_client):
   print("Getting pair text from ", len(forums), " forums")
   sid_map, pairs = orl.get_review_rebuttal_pairs(

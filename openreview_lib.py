@@ -1,7 +1,12 @@
 import collections
+import openreview
+import random
 import re
 
 from tqdm import tqdm
+
+ForumList = collections.namedtuple("ForumList",
+                                   "conference forums url".split())
 
 Pair = collections.namedtuple("Pair",
   "forum review_sid rebuttal_sid title review_author".split())
@@ -138,6 +143,17 @@ def build_sid_map(note_map, forum_pairs):
 
 
 def get_forum_pairs(forum_id, note_map):
+  """ Gets (review, rebuttal) pairs from a forum.
+
+      Args:
+        forum_id: The forum id from OpenReview
+        note_map: A map from note_id to openreview.Note objects for all the
+        notes in the forum.
+
+      Returns:
+        A list of Pairs containing a review and a rebuttal (by super id)
+  """
+
   title = note_map[forum_id].content["title"]
   top_children = [note
                   for note in note_map.values()
@@ -147,6 +163,9 @@ def get_forum_pairs(forum_id, note_map):
                 if shorten_author(
                     flatten_signature(note)
                 ) == AuthorCategories.REVIEWER and 'review' in note.content]
+  # Replies to the dummy 'Forum' node that are written by a Reviewer and have a
+  # "review" item in their content (so not just a comment by a reviewer) count
+  # as reviews.
   pairs = []
   
   for review_id in review_ids:
@@ -155,10 +174,12 @@ def get_forum_pairs(forum_id, note_map):
         if note.replyto == review_id and shorten_author(
               flatten_signature(note)) == AuthorCategories.AUTHOR ], 
               key=lambda x:x.cdate)
+    # Candidate responses are responses to a known review note which are written
+    # by the Authors.
     if not candidate_responses:
       continue
     else:
-      super_response = candidate_responses[0]
+      super_response = candidate_responses[0] # This should be the earliest
       pairs.append(
         Pair(forum=forum_id, title=title,
              review_sid=review_id,
@@ -173,14 +194,20 @@ def get_review_rebuttal_pairs(forums, or_client):
   """From a list of forums, extract review and rebuttal pairs.
   
     Args:
-      forums: A list of forum ids (directly from OR API)
+      forums: A list of forum ids (can be directly from OR API)
 
     Returns:
-      sid_map: A map from sids to a list of comments they encompass
+      sid_map: A map from "super-ids" to a list of comments they encompass
 
   """
+
   review_rebuttal_pairs = []
   sid_map = {}
+  # A sid or "super-id" is used to group utterances that spread over multiple
+  # OpenReview comments. For example, a reviewer replies to themselves with
+  # further details, or an author adds a very long rebuttal in multiple replies
+  # to the review comment.
+
   print("Getting forums")
   for forum_id in tqdm(forums):
     note_map = {note.id: note
@@ -194,19 +221,21 @@ def get_review_rebuttal_pairs(forums, or_client):
                  for pair in forum_pairs
                  if (pair.rebuttal_sid in forum_sid_map
                      and pair.review_sid in forum_sid_map)]
+    # Above: ensuring that we don't have pairs for which the note has actually
+    # been deleted.
 
     for pair in sid_pairs:
       assert pair.review_sid in forum_sid_map
-      assert pair.rebuttal_sid in forum_sid_map
+      assert pair.rebuttal_sid in forum_sid_map # Double checking, lol
 
-    assert (len(sid_pairs) == len(set(sid_pairs))
+    assert (len(sid_pairs) == len(set(sid_pairs)) # Triple checking
             == len(set(x.review_sid for x in sid_pairs))
             == len(set(x.rebuttal_sid for x in sid_pairs)))
 
     sid_map[forum_id] = forum_sid_map
     review_rebuttal_pairs += sid_pairs
 
-  full_sid_map = {}
+  full_sid_map = {} # This is a map for sids from all the forums
   for forum_id, forum_sid_map in sid_map.items():
     id_to_note_map = {note.id:note
         for note in or_client.get_notes(forum=forum_id)} 
@@ -264,13 +293,24 @@ class Text(object):
 
 
 def get_classification_labels(notes):
-  print(notes[0].content)
   return {"rating": int(notes[0].content["rating"].split(":")[0]),
       "confidence": int(notes[0].content["confidence"].split(":")[0])}
 
 
 def get_classification_examples(pairs, review_or_rebuttal,
     sid_map, corenlp_client):
+  """ Gets text of review or rebuttal along with categorical labels.
+
+      Args:
+        pairs: A list of review/rebuttal Pairs 
+        review_or_rebuttal: which to collect, "review" or "rebuttal"
+        sid_map: A map from super ids to the list of comments they encompass
+        corenlp_client: A corenlp client with at least ssplit, tokenize
+
+      Returns:
+        A list of ClassificationExamples.
+  """
+
   assert review_or_rebuttal in ["review", "rebuttal"]
 
   examples = []
@@ -283,7 +323,6 @@ def get_classification_examples(pairs, review_or_rebuttal,
     top_comment_title = relevant_notes[0].content["title"] 
     text = get_text_from_note_list(relevant_notes, corenlp_client)
     labels = get_classification_labels(relevant_notes)
-    print(labels)
     examples.append(ClassificationExample(
       i, sid, text, pair.title, top_comment_title, pair.review_author,
       pair.forum, labels)._asdict())
@@ -330,4 +369,52 @@ def get_abstract_texts(forums, or_client, corenlp_client):
     abstracts.append(Text(abstract_text, corenlp_client).chunks)
   return abstracts
 
+def get_all_conference_forums(conference, client):
+  return list(openreview.tools.iterget_notes(
+    client, invitation=INVITATION_MAP[conference]))
+
+
+def get_sampled_forums(conference, client, sample_rate):
+  """ Return forums from a conference, possibly sampled.
+      Args:
+        conference: Conference name (from openreview_lib.Conference)
+        guest_client: OpenReview API guest client
+        sample_rate: Fraction of forums to retain
+      Returns:
+        ForumList containing sampled forums and metadata
+  """
+  forums = [forum.id
+            for forum in get_all_conference_forums(conference, client)]
+  if sample_rate == 1:
+    pass # Just send everything through
+  else:
+    random.shuffle(forums)
+    forums = forums[:int(sample_rate * len(forums))]
+  return ForumList(conference, forums, INVITATION_MAP[conference])
+
+
+def get_sub_split_forum_map(conference, guest_client):
+  """ Randomly sample forums into train/dev/test sets.
+      
+      Args:
+        conference: Conference name (from openreview_lib.Conference)
+        guest_client: OpenReview API guest client
+
+      Returns:
+        sub_split_forum_map: Map from  "train"/"dev"/"test" to a list of forum
+        ids
+  """
+    
+  forums = get_sampled_forums(conference, guest_client, 1).forums
+  random.shuffle(forums)
+  offsets = {
+      SubSplit.DEV :(0, int(0.2*len(forums))),
+      SubSplit.TRAIN : (int(0.2*len(forums)), int(0.8*len(forums))),
+      SubSplit.TEST : (int(0.8*len(forums)), int(1.1*len(forums)))
+      }
+  sub_split_forum_map = {
+      sub_split: forums[start:end]
+      for sub_split, (start, end) in offsets.items()
+      }
+  return sub_split_forum_map
 
