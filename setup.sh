@@ -2,18 +2,12 @@
 #source iddve/bin/activate
 #python -m pip install -r requirements.txt
 
-#export CORENLP_HOME="/home/nnayak/stanford-corenlp-full-2018-02-27/"
+export CORENLP_HOME="/home/nnayak/stanford-corenlp-full-2018-02-27/"
+# ^ replace with path to your local CoreNLP directory
 
-rm -rf db
-mkdir db
-rm -rf temp
-mkdir temp
-python 2_populate_database.py
-#python -c "import nltk; nltk.download('stopwords')"
-mkdir baselines/datasets
-cd baselines/rule_based
-python gather_matches.py
-cd ../
-python create_datasets.py
-python run_baselines.py
+python3 -m venv iddve
+source iddve/bin/activate
+python -m pip install -r requirements.txt
 
+mkdir review_classification
+python build_review_classification.py
