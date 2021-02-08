@@ -6,6 +6,12 @@ from tqdm import tqdm
 Pair = collections.namedtuple("Pair",
   "forum review_sid rebuttal_sid title review_author".split())
 
+Example = collections.namedtuple("Example",
+  ("index review_sid rebuttal_sid review_text rebuttal_text "
+   "title review_author forum labels").split())
+
+ClassificationExample = collections.namedtuple("ClassificationExample",
+  ("index sid text forum_title top_comment_title  author forum labels").split())
 
 class Conference(object):
   iclr18 = "iclr18"
@@ -139,7 +145,8 @@ def get_forum_pairs(forum_id, note_map):
   review_ids = [note.id
                 for note in top_children
                 if shorten_author(
-                    flatten_signature(note)) == AuthorCategories.REVIEWER]
+                    flatten_signature(note)
+                ) == AuthorCategories.REVIEWER and 'review' in note.content]
   pairs = []
   
   for review_id in review_ids:
@@ -231,18 +238,7 @@ def get_text(note):
 def get_text_from_note_list(note_list, corenlp_client):
   supernote_text = "\n\n".join(get_text(subnote) for subnote in note_list)
   chunks = Text(supernote_text, corenlp_client).chunks
-  if chunks[0] and chunks[0][0]:
-    print("CHUNKS")
-    print(" ".join(chunks[0][0]))
-  else:
-    print("Problem")
-    print(chunks)
   return chunks
-
-
-Example = collections.namedtuple("Example",
-  ("index review_sid rebuttal_sid review_text rebuttal_text "
-   "title review_author forum labels").split())
 
 
 class Text(object):
@@ -265,6 +261,35 @@ class Text(object):
           else:
             current_sentence.append(line.split()[TOKEN_INDEX])
         self.chunks.append(sentences)
+
+
+def get_classification_labels(notes):
+  print(notes[0].content)
+  return {"rating": int(notes[0].content["rating"].split(":")[0]),
+      "confidence": int(notes[0].content["confidence"].split(":")[0])}
+
+
+def get_classification_examples(pairs, review_or_rebuttal,
+    sid_map, corenlp_client):
+  assert review_or_rebuttal in ["review", "rebuttal"]
+
+  examples = []
+  for i, pair in tqdm(list(enumerate(pairs))):
+    if review_or_rebuttal == "review":
+      sid = pair.review_sid
+    else:
+      sid = pair.rebuttal_sid
+    relevant_notes = sid_map[pair.forum][sid]
+    top_comment_title = relevant_notes[0].content["title"] 
+    text = get_text_from_note_list(relevant_notes, corenlp_client)
+    labels = get_classification_labels(relevant_notes)
+    print(labels)
+    examples.append(ClassificationExample(
+      i, sid, text, pair.title, top_comment_title, pair.review_author,
+      pair.forum, labels)._asdict())
+
+  return examples
+
 
 
 def get_pair_text(pairs, sid_map, corenlp_client):

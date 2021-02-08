@@ -61,18 +61,20 @@ def gather_datasets(data_dir):
       key_prefix = get_key_prefix(obj)
       queries = []
       corpus = []
-      for pair in obj["review_rebuttal_pairs"][:10]:
+      for pair in obj["review_rebuttal_pairs"]:
         corpus += documents_from_chunks(pair["review_text"], key_prefix +
         "_review_" + str(pair["index"]))
         queries += documents_from_chunks(pair["rebuttal_text"], key_prefix +
         "_rebuttal_" + str(pair["index"]))
+        if len(corpus) > 10000:
+          break
       query_map[dataset] = list(sorted(queries, key=lambda x:x.key))
       corpus_map[dataset] = list(sorted(corpus, key=lambda x:x.key))
 
   assert len(corpus_map) == len(query_map) == 4
   return corpus_map, query_map
 
-NUM_SAMPLES = 20
+NUM_SAMPLES = 30
 
 def score_dataset(corpus, queries):
   model = BM25Okapi([doc.preprocessed_tokens for doc in corpus])
@@ -90,7 +92,11 @@ def score_dataset(corpus, queries):
   return scores
 
 def sample_from_scores(query_scores, relevant_doc_indices, num_samples):
-  sample_indices = random.sample(list(range(len(query_scores))), num_samples)
+  if len(relevant_doc_indices) > NUM_SAMPLES:
+    sample_indices = []
+  else:
+    sample_indices = random.sample(list(range(len(query_scores))), NUM_SAMPLES -
+        len(relevant_doc_indices))
   all_indices = set(sample_indices + relevant_doc_indices)
   return sorted([(i, query_scores[i]) for i in all_indices], key=lambda x:x[1])
 
@@ -118,13 +124,13 @@ def write_datasets_to_file(corpus_map, query_map, data_dir):
 def create_example_lines(split, corpus, queries, query_i, doc_1_i, doc_2_i):
   return "".join([
       "\t".join([split,
-      " ".join(queries[query_i].tokens),
-      " ".join(corpus[doc_1_i].tokens),
-      " ".join(corpus[doc_2_i].tokens), "0"]), "\n",
+      str(query_i),
+      str(doc_1_i),
+      str(doc_2_i), "0"]), "\n",
       "\t".join([split,
-      " ".join(queries[query_i].tokens),
-      " ".join(corpus[doc_2_i].tokens),
-      " ".join(corpus[doc_1_i].tokens), "1"]), "\n"])
+      str(query_i),
+      str(doc_2_i),
+      str(doc_1_i), "1"]), "\n"])
 
 
 def create_weak_supervision_tsv(results, data_dir, corpus_map, query_map):
