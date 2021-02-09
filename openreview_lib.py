@@ -5,6 +5,8 @@ import re
 
 from tqdm import tqdm
 
+random.seed(47)
+
 ForumList = collections.namedtuple("ForumList",
                                    "conference forums url".split())
 

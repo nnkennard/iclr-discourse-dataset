@@ -1,13 +1,19 @@
+import argparse
 import collections
 import corenlp
 import json
 import openreview
-import random
+import os
 import sys
 
 import openreview_lib as orl
 
-random.seed(47)
+parser = argparse.ArgumentParser(
+    description='Build database of reviews with categorical labels')
+parser.add_argument('-o', '--outputdir',
+    default="review_classification_dataset/",
+    type=str, help='path to database file')
+
 
 CORENLP_ANNOTATORS = "ssplit tokenize"
 
@@ -56,6 +62,11 @@ def build_review_classification_dataset(conference, guest_client, output_dir):
 
 
 def main():
+
+  args = parser.parse_args()
+  if not os.path.exists(args.outputdir):
+    os.makedirs(args.outputdir)
+
   guest_client = openreview.Client(baseurl='https://api.openreview.net')
   # In the overall dataset, we have one year for unstructured training, one year
   # for totally unseen test set, and one year which we split into
@@ -65,7 +76,7 @@ def main():
   output_dir = "review_classification/"
 
   build_review_classification_dataset(
-      TRAINDEV_CONFERENCE, guest_client, output_dir)
+      TRAINDEV_CONFERENCE, guest_client, args.outputdir)
 
 
 if __name__ == "__main__":

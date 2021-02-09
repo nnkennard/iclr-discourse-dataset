@@ -4,7 +4,6 @@ import corenlp
 import json
 import openreview
 import os
-import random
 import sys
 
 import openreview_lib as orl
@@ -14,8 +13,6 @@ parser = argparse.ArgumentParser(
 parser.add_argument('-o', '--outputdir', default="review_rebuttal_pair_dataset/",
     type=str, help='path to database file')
 
-
-random.seed(47)
 
 CORENLP_ANNOTATORS = "ssplit tokenize"
 def get_pair_text_from_forums(forums, guest_client):
