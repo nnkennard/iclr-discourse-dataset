@@ -293,8 +293,12 @@ class Text(object):
 
 
 def get_classification_labels(notes):
-  return {"rating": int(notes[0].content["rating"].split(":")[0]),
-      "confidence": int(notes[0].content["confidence"].split(":")[0])}
+  top_comment = notes[0]
+  labels = {}
+  for key in ["rating", "confidence"]:
+    if key in top_comment.content:
+      labels[key] = int(top_comment.content[key].split(":")[0])
+  return labels 
 
 
 def get_classification_examples(pairs, review_or_rebuttal,
@@ -332,6 +336,17 @@ def get_classification_examples(pairs, review_or_rebuttal,
 
 
 def get_pair_text(pairs, sid_map, corenlp_client):
+  """ Get review and rebuttal text along with metadata and labels.
+      
+      Args:
+        pairs: A list of review/rebuttal Pairs
+        sid_map: A map from super ids to the list of comments they encompass
+        corenlp_client: A corenlp client with at least ssplit, tokenize
+
+      Returns:
+        A list of Examples
+  """
+
   examples = []
 
   print("Processing pairs")
@@ -342,7 +357,9 @@ def get_pair_text(pairs, sid_map, corenlp_client):
         sid_map[pair.forum][pair.rebuttal_sid], corenlp_client)
     examples.append(Example(
       i, pair.review_sid, pair.rebuttal_sid, review_text, rebuttal_text,
-      pair.title, pair.review_author, pair.forum, None)._asdict())
+      pair.title, pair.review_author, pair.forum,
+      get_classification_labels(
+        sid_map[pair.forum][pair.review_sid]))._asdict())
 
   return examples
 
@@ -376,6 +393,7 @@ def get_all_conference_forums(conference, client):
 
 def get_sampled_forums(conference, client, sample_rate):
   """ Return forums from a conference, possibly sampled.
+
       Args:
         conference: Conference name (from openreview_lib.Conference)
         guest_client: OpenReview API guest client
@@ -385,6 +403,7 @@ def get_sampled_forums(conference, client, sample_rate):
   """
   forums = [forum.id
             for forum in get_all_conference_forums(conference, client)]
+  sample_rate /= 100
   if sample_rate == 1:
     pass # Just send everything through
   else:

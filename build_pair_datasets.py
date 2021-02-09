@@ -1,11 +1,19 @@
+import argparse
 import collections
 import corenlp
 import json
 import openreview
+import os
 import random
 import sys
 
 import openreview_lib as orl
+
+parser = argparse.ArgumentParser(
+    description='Build database of review-rebuttal pairs')
+parser.add_argument('-o', '--outputdir', default="review_rebuttal_pair_dataset/",
+    type=str, help='path to database file')
+
 
 random.seed(47)
 
@@ -25,7 +33,19 @@ def get_abstracts_from_forums(forums, guest_client):
     return orl.get_abstract_texts(forums, guest_client, corenlp_client)
 
 def get_unstructured(conference, guest_client, output_dir):
-  forums =  get_sampled_forums(conference, guest_client, 1).forums
+  """ Get unstructured data for domain pretraining.
+
+      This includes review and rebuttal text (undifferentiated) and abstracts.
+
+     Args:
+        conference: Conference name (from openreview_lib.Conference)
+        guest_client: OpenReview API guest client
+        output dir: Directory (which already exists) in which to dump jsons.
+
+      Returns:
+        Nothing -- just dumps to json.
+  """
+  forums =  orl.get_sampled_forums(conference, guest_client, 1).forums
   pair_texts = get_pair_text_from_forums(forums, guest_client)
   unstructured_text = []
   for pair in pair_texts:
@@ -42,17 +62,19 @@ def get_unstructured(conference, guest_client, output_dir):
       }, f)
 
 def get_traindev(conference, guest_client, output_dir):
-  forums = get_sampled_forums(conference, guest_client, 1).forums
-  random.shuffle(forums)
-  offsets = {
-      orl.SubSplit.DEV :(0, int(0.2*len(forums))),
-      orl.SubSplit.TRAIN : (int(0.2*len(forums)), int(0.8*len(forums))),
-      orl.SubSplit.TEST : (int(0.8*len(forums)), int(1.1*len(forums)))
-      }
-  sub_split_forum_map = {
-      sub_split: forums[start:end]
-      for sub_split, (start, end) in offsets.items()
-      }
+  """ Get review-rebuttal pairs in train/dev/test split.
+
+      Args:
+        conference: Conference name (from openreview_lib.Conference)
+        guest_client: OpenReview API guest client
+        output dir: Directory (which already exists) in which to dump jsons.
+
+      Returns:
+        Nothing -- just dumps to json.
+  """
+
+  sub_split_forum_map = orl.get_sub_split_forum_map(conference, guest_client)
+
   for sub_split, sub_split_forums in sub_split_forum_map.items():
     pair_texts = get_pair_text_from_forums(sub_split_forums, guest_client)
     with open(
@@ -63,11 +85,20 @@ def get_traindev(conference, guest_client, output_dir):
       "split": orl.Split.TRAINDEV,
       "subsplit": sub_split,
       "review_rebuttal_pairs": pair_texts,
-      "abstracts": None
       }, f)
 
 def get_truetest(conference, guest_client, output_dir):
-  forums =  get_sampled_forums(conference, guest_client, 0.2).forums
+  """ Get review-rebuttal pairs in sampled at 20% for test set.
+
+      Args:
+        conference: Conference name (from openreview_lib.Conference)
+        guest_client: OpenReview API guest client
+        output dir: Directory (which already exists) in which to dump jsons.
+
+      Returns:
+        Nothing -- just dumps to json.
+  """
+  forums =  orl.get_sampled_forums(conference, guest_client, 0.2).forums
   pair_texts = get_pair_text_from_forums(forums, guest_client)
   with open(output_dir + "/" + orl.Split.TRUETEST + ".json", 'w') as f:
     json.dump({
@@ -75,12 +106,22 @@ def get_truetest(conference, guest_client, output_dir):
       "split": orl.Split.TRUETEST,
       "subsplit": orl.SubSplit.TEST,
       "review_rebuttal_pairs": pair_texts,
-      "abstracts": None
       }, f)
 
 
 def main():
+
+  args = parser.parse_args()
+  if not os.path.exists(args.outputdir):
+    os.makedirs(args.outputdir)
+
   guest_client = openreview.Client(baseurl='https://api.openreview.net')
+
+  # There are three splits:
+  #   UNSTRUCTURED: for unstructured pretraining (like Don't Stop Pretraining
+  #   paper) (ICLLR 2018)
+  #   TRUETEST: totally unseen test set (ICLR 2020)
+  #   TRAINDEV: normal train/dev/test split (ICLR 2019)
 
   SPLIT_TO_CONFERENCE = {
     orl.Split.UNSTRUCTURED: orl.Conference.iclr18,
@@ -88,14 +129,13 @@ def main():
     orl.Split.TRUETEST: orl.Conference.iclr20
     }
 
-  output_dir = "unlabeled/"
-
   get_unstructured(
-      SPLIT_TO_CONFERENCE[orl.Split.UNSTRUCTURED], guest_client, output_dir)
+      SPLIT_TO_CONFERENCE[orl.Split.UNSTRUCTURED], guest_client,
+          args.outputdir)
   get_traindev(
-      SPLIT_TO_CONFERENCE[orl.Split.TRAINDEV], guest_client, output_dir)
+      SPLIT_TO_CONFERENCE[orl.Split.TRAINDEV], guest_client, args.outputdir)
   get_truetest(
-      SPLIT_TO_CONFERENCE[orl.Split.TRUETEST], guest_client, output_dir)
+      SPLIT_TO_CONFERENCE[orl.Split.TRUETEST], guest_client, args.outputdir)
 
 
 if __name__ == "__main__":
