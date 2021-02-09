@@ -1,9 +1,9 @@
 import argparse
 import collections
-import corenlp
 import json
 import openreview
 import os
+import stanza
 import sys
 
 import openreview_lib as orl
@@ -15,22 +15,17 @@ parser.add_argument('-o', '--outputdir', default="review_rebuttal_pair_dataset/"
 parser.add_argument('-d', '--debug', action='store_true',
                     help='truncate to small subset of data for debugging')
 
-
-CORENLP_ANNOTATORS = "ssplit tokenize"
+STANZA_PIPELINE = stanza.Pipeline(lang='en', processors='tokenize')
 
 def get_pair_text_from_forums(forums, guest_client):
   print("Getting pair text from ", len(forums), " forums")
   sid_map, pairs = orl.get_review_rebuttal_pairs(
       forums, guest_client)
-  with corenlp.CoreNLPClient(
-      annotators=CORENLP_ANNOTATORS, output_format='conll') as corenlp_client:
-    return orl.get_pair_text(pairs, sid_map, corenlp_client)
+  return orl.get_pair_text(pairs, sid_map, STANZA_PIPELINE)
 
 def get_abstracts_from_forums(forums, guest_client):
   print("Getting abstracts")
-  with corenlp.CoreNLPClient(
-      annotators=CORENLP_ANNOTATORS, output_format='conll') as corenlp_client:
-    return orl.get_abstract_texts(forums, guest_client, corenlp_client)
+  return orl.get_abstract_texts(forums, guest_client, STANZA_PIPELINE)
 
 def get_unstructured(conference, guest_client, output_dir, sample_frac):
   """ Get unstructured data for domain pretraining.
@@ -118,8 +113,16 @@ TRUETEST_SUBSAMPLE = 0.2
 def main():
 
   args = parser.parse_args()
-  if not os.path.exists(args.outputdir):
-    os.makedirs(args.outputdir)
+
+  if args.debug:
+    base_sample_frac = 0.01
+    assert args.outputdir.endswith("/")
+    output_dir = args.outputdir[:-1] + "_debug/"
+  else:
+    base_sample_frac = 1.0
+    output_dir = args.outputdir
+  if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
 
   guest_client = openreview.Client(baseurl='https://api.openreview.net')
 
@@ -135,19 +138,14 @@ def main():
     orl.Split.TRUETEST: orl.Conference.iclr20
     }
 
-  if args.debug:
-    base_sample_frac = 0.01
-  else:
-    base_sample_frac = 1.0
-
   get_unstructured(
       SPLIT_TO_CONFERENCE[orl.Split.UNSTRUCTURED], guest_client,
-          args.outputdir, base_sample_frac)
+          output_dir, base_sample_frac)
   get_traindev(
-      SPLIT_TO_CONFERENCE[orl.Split.TRAINDEV], guest_client, args.outputdir,
+      SPLIT_TO_CONFERENCE[orl.Split.TRAINDEV], guest_client, output_dir,
       base_sample_frac)
   get_truetest(
-      SPLIT_TO_CONFERENCE[orl.Split.TRUETEST], guest_client, args.outputdir,
+      SPLIT_TO_CONFERENCE[orl.Split.TRUETEST], guest_client, output_dir,
       base_sample_frac * TRUETEST_SUBSAMPLE)
 
 

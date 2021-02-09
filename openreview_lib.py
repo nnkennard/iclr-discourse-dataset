@@ -73,9 +73,6 @@ def flatten_signature(note):
   return  "|".join(sorted(sig.split("/")[-1] for sig in note.signatures))
 
 
-TOKEN_INDEX = 1  # Index of token field in conll output
-
-
 def shorten_author(author):
   # TODO: do this way earlier
   assert "|" not in author # Only one signature per comment, I hope
@@ -266,32 +263,25 @@ def get_text(note):
     assert False
 
     
-def get_text_from_note_list(note_list, corenlp_client):
+def get_text_from_note_list(note_list, pipeline):
   supernote_text = "\n\n".join(get_text(subnote) for subnote in note_list)
-  chunks = Text(supernote_text, corenlp_client).chunks
+  chunks = Text(supernote_text, pipeline).chunks
   return chunks
 
 
 class Text(object):
-  def __init__(self, text, corenlp_client):
+  def __init__(self, text, pipeline):
     self.chunks = []
     chunk_texts = [chunk.strip() for chunk in text.split("\n")]
     for chunk_text in chunk_texts:
       if not chunk_text:
         self.chunks.append([])
       else:
-        annotated = corenlp_client.annotate(chunk_text)
-        lines = annotated.split("\n")
-        sentences = []
-        current_sentence = []
-        for line in lines:
-          if not line.strip(): # Blank links indicate the end of a sentence
-            if current_sentence:
-              sentences.append(current_sentence)
-            current_sentence = []
-          else:
-            current_sentence.append(line.split()[TOKEN_INDEX])
-        self.chunks.append(sentences)
+        annotated = pipeline(chunk_text)
+        chunk = [[x.text
+                    for x in sentence.tokens]
+                    for sentence in annotated.sentences]
+        self.chunks.append(chunk)
 
 
 def get_classification_labels(notes):
@@ -337,13 +327,13 @@ def get_classification_examples(pairs, review_or_rebuttal,
 
 
 
-def get_pair_text(pairs, sid_map, corenlp_client):
+def get_pair_text(pairs, sid_map, pipeline):
   """ Get review and rebuttal text along with metadata and labels.
       
       Args:
         pairs: A list of review/rebuttal Pairs
         sid_map: A map from super ids to the list of comments they encompass
-        corenlp_client: A corenlp client with at least ssplit, tokenize
+        pipeline: A Stanza pipeline with at least ssplit, tokenize
 
       Returns:
         A list of Examples
@@ -354,9 +344,9 @@ def get_pair_text(pairs, sid_map, corenlp_client):
   print("Processing pairs")
   for i, pair in tqdm(list(enumerate(pairs))):
     review_text = get_text_from_note_list(
-        sid_map[pair.forum][pair.review_sid], corenlp_client)
+        sid_map[pair.forum][pair.review_sid], pipeline)
     rebuttal_text = get_text_from_note_list(
-        sid_map[pair.forum][pair.rebuttal_sid], corenlp_client)
+        sid_map[pair.forum][pair.rebuttal_sid], pipeline)
     examples.append(Example(
       i, pair.review_sid, pair.rebuttal_sid, review_text, rebuttal_text,
       pair.title, pair.review_author, pair.forum,
@@ -366,11 +356,13 @@ def get_pair_text(pairs, sid_map, corenlp_client):
   return examples
 
 
-def get_abstract_texts(forums, or_client, corenlp_client):
+def get_abstract_texts(forums, or_client, pipeline):
   """From a list of forums, extract review and rebuttal pairs.
   
     Args:
       forums: A list of forum ids (directly from OR API)
+      or_client: OpenReview API client
+      pipeline: A Stanza pipeline with at least ssplit, tokenize
 
     Returns:
       sid_map: A map from sids to a list of comments they encompass
@@ -385,7 +377,7 @@ def get_abstract_texts(forums, or_client, corenlp_client):
     assert len(root_getter) == 1
     root, = root_getter
     abstract_text = root.content["abstract"]
-    abstracts.append(Text(abstract_text, corenlp_client).chunks)
+    abstracts.append(Text(abstract_text, pipeline).chunks)
   return abstracts
 
 def get_all_conference_forums(conference, client):
