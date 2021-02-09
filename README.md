@@ -2,25 +2,23 @@
 
 ## Setup
 
-0. You will need to have downloaded [Stanford CoreNLP](https://stanfordnlp.github.io/CoreNLP/) and set `$CORENLP_HOME` to point to the unzipped directory.
-
-1. Set up a Python virtual environment
+1. Set up a Python virtual environment and download Stanza models (So now you don't have to do the CoreNLP stuff)
 ```
 python3 -m venv iddve
 source iddve/bin/activate
 python -m pip install -r mini_requirements.txt
+
+python -c "import stanza; stanza.download('en')"
 ```
 
 2. Run code to create datasets
 ```
-python build_review_classification.py
 python build_pair_datasets.py
 ```
 
 To build a smaller version of the dataset for viewing and testing, add `--debug`:
 
 ```
-python build_review_classification.py --debug
 python build_pair_datasets.py --debug
 ```
 
