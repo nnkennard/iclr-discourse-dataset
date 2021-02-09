@@ -13,8 +13,4 @@ This step takes about 30 minutes, and should produce dataset files in the direct
 Output files are in JSON format. Text is represented as a list of list of
 lists:
 
-The top level lists represent chunks (‘paragraphs’ separated by new
-lines). Each chunk is a list of sentences, and each sentence is a list of
-tokens. Sentence splitting and tokenizing is carried out by the CoreNLP pipeline
-
-
+The top level lists represent chunks (‘paragraphs’ separated by newlines). Each chunk is a list of sentences, and each sentence is a list of tokens. Sentence splitting and tokenizing is carried out by the CoreNLP pipeline.
