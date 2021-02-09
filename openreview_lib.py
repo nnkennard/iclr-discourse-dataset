@@ -405,7 +405,6 @@ def get_sampled_forums(conference, client, sample_rate):
   """
   forums = [forum.id
             for forum in get_all_conference_forums(conference, client)]
-  sample_rate /= 100
   if sample_rate == 1:
     pass # Just send everything through
   else:
@@ -414,19 +413,20 @@ def get_sampled_forums(conference, client, sample_rate):
   return ForumList(conference, forums, INVITATION_MAP[conference])
 
 
-def get_sub_split_forum_map(conference, guest_client):
+def get_sub_split_forum_map(conference, guest_client, sample_frac):
   """ Randomly sample forums into train/dev/test sets.
       
       Args:
         conference: Conference name (from openreview_lib.Conference)
         guest_client: OpenReview API guest client
+        sample_frac: Percentage of examples to retain
 
       Returns:
         sub_split_forum_map: Map from  "train"/"dev"/"test" to a list of forum
         ids
   """
     
-  forums = get_sampled_forums(conference, guest_client, 1).forums
+  forums = get_sampled_forums(conference, guest_client, sample_frac).forums
   random.shuffle(forums)
   offsets = {
       SubSplit.DEV :(0, int(0.2*len(forums))),
