@@ -2,18 +2,31 @@
 
 ## Setup
 
-You will need to have downloaded [Stanford CoreNLP](https://stanfordnlp.github.io/CoreNLP/) and set `$CORENLP_HOME` to point to the unzipped directory.
+0. You will need to have downloaded [Stanford CoreNLP](https://stanfordnlp.github.io/CoreNLP/) and set `$CORENLP_HOME` to point to the unzipped directory.
 
-To set up the environment and build the dataset, run
+1. Set up a Python virtual environment
+```
+python3 -m venv iddve
+source iddve/bin/activate
+python -m pip install -r mini_requirements.txt
+```
+
+2. Run code to create datasets
+```
+python build_review_classification.py
+python build_pair_datasets.py
+```
+
+To build a smaller version of the dataset for viewing and testing, add `--debug`:
 
 ```
-bash setup.sh
+python build_review_classification.py --debug
+python build_pair_datasets.py --debug
 ```
 
-This step takes about 30 minutes, and should produce dataset files in the directory `review_classification_dataset/` and `review_rebuttal_pair_dataset/`.
+This will create smaller datasets, and add them in a folder whose name ends in `_debug`.
 
 ## Data format
-
 
 Output files are in JSON format. You should see this file structure:
 
@@ -22,6 +35,12 @@ iclr-discourse-dataset
 │
 └─── review_rebuttal_pair_dataset/
 │   │   unstructured.json
+│   │   traindev_train.json
+│   │   traindev_dev.json
+│   │   traindev_test.json
+│   │   truetest.json
+└─── review_rebuttal_pair_dataset_debug/ # if you ran with --debug as well
+│   │   unstructured.json # These files will be much smaller
 │   │   traindev_train.json
 │   │   traindev_dev.json
 │   │   traindev_test.json
