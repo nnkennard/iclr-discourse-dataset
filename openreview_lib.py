@@ -405,7 +405,6 @@ def get_sampled_forums(conference, client, sample_rate):
   """
   forums = [forum.id
             for forum in get_all_conference_forums(conference, client)]
-  sample_rate /= 100
   if sample_rate == 1:
     pass # Just send everything through
   else:
