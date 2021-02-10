@@ -42,13 +42,15 @@ iclr-discourse-dataset
 │   │   traindev_dev.json
 │   │   traindev_test.json
 │   │   truetest.json
+|
 └─── review_rebuttal_pair_dataset_debug/ # if you ran with --debug as well
 │   │   unstructured.json # These files will be much smaller
 │   │   traindev_train.json
 │   │   traindev_dev.json
 │   │   traindev_test.json
 │   │   truetest.json
-│   ... other ...
+│   
+|   ... other ...
 │   ... stuff ...
 
 ```
