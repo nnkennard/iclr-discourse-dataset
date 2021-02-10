@@ -1,0 +1,3 @@
+openreview-py==1.0.19
+stanza==1.2
+tqdm==4.56.1
