@@ -15,28 +15,19 @@ python -c "import stanza; stanza.download('en')"
 
 2. Run code to create datasets
 ```
-python build_pair_datasets.py
+python build_pair_datasets.py [--debug]
 ```
-
-To build a smaller version of the dataset for viewing and testing, add `--debug`:
-
-```
-python build_pair_datasets.py --debug
-```
-
-This will create smaller datasets, and add them in a folder whose name ends in `_debug`.
+Adding the `--debug` flag creates smaller datasets, better for viewing and testing. They are created in a folder whose name ends in `_debug`.
 
 3. Verify the built datasets
 
-Run
+To compare the checksums of your generated with the originals, run
 ```
-python check.py
+python check.py [--debug]
 ```
-or 
-```
-python check.py --debug
-```
-depending on whether you have built the whole dataset or just the debug subset. If you don't get 'OK' for all the files... uhh, for now, ask Neha what to do about it
+The `--debug` flag checks the files created using the debug flag in step 2.
+
+If you don't get 'OK' for all the files... uhh, for now, ask Neha what to do about it
 
 ## Data format
 
