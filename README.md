@@ -2,6 +2,8 @@
 
 ## Setup
 
+0. If you are in IESL and using blake.cs.umass.edu, please run `module load python3/3.9.1-2102` first, without which it is possible that Stanza won't work.
+
 1. Set up a Python virtual environment and download Stanza models (So now you don't have to do the CoreNLP stuff)
 ```
 python3 -m venv iddve
