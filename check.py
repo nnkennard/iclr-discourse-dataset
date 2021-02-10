@@ -22,8 +22,7 @@ except ImportError:  # pip < 10.0
 Hashes = collections.namedtuple("Hashes", orl.DATASETS)
 
 HASHES_V0_0 = Hashes(
-    #unstructured="62570fe55c7dc02e782eddd12f26ad2d",
-    unstructured="62570fe55c7dc02_imfake_e782eddd12f26ad2d",
+    unstructured="62570fe55c7dc02e782eddd12f26ad2d",
     traindev_train="6d72c4c8c822f834878d2465b438be02",
     traindev_dev="e08f5cb45c54424f4fd38717684d4d05",
     traindev_test="17627d0f6d2843ce63fdb2f29d10321e",
