@@ -26,6 +26,18 @@ python build_pair_datasets.py --debug
 
 This will create smaller datasets, and add them in a folder whose name ends in `_debug`.
 
+3. Verify the built datasets
+
+Run
+```
+python check.py
+```
+or 
+```
+python check.py --debug
+```
+depending on whether you have built the whole dataset or just the debug subset. If you don't get 'OK' for all the files... uhh, for now, ask Neha what to do about it
+
 ## Data format
 
 Output files are in JSON format. You should see this file structure:
