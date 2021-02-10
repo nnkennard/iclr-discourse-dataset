@@ -8,7 +8,7 @@
 ```
 python3 -m venv iddve
 source iddve/bin/activate
-python -m pip install -r mini_requirements.txt
+python -m pip install -r requirements/mini_requirements.txt
 
 python -c "import stanza; stanza.download('en')"
 ```

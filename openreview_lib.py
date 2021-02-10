@@ -94,6 +94,17 @@ def shorten_author(author):
 
   
 def get_descendant_path(sid, ordered_notes):
+  """Get a path of descendants that share the same author.
+
+     Args:
+       sid: super id of the ancestor in question
+       ordered_notes: notes in the forum ordered by creation date
+
+     Returns:
+       A list of the note ids in the path of descendants
+  """
+
+  # Find the super note in the time ordering
   sid_index = None
   for i, note in enumerate(ordered_notes):
     if note.id == sid:
@@ -101,9 +112,12 @@ def get_descendant_path(sid, ordered_notes):
       root_note = note
       break
   assert sid_index is not None
+
   descendants = [root_note]
   for i, note in enumerate(ordered_notes):
     if i <= sid_index:
+      # we expect descendants to be created after...
+      # not always true unfortunately
       continue
     else:
       if (note.replyto == descendants[-1].id 
@@ -113,26 +127,40 @@ def get_descendant_path(sid, ordered_notes):
 
 
 def build_sid_map(note_map, forum_pairs):    
+  """Builds a map from top comment ids to their continuation descendants.
+    
+     Args:
+       note_map: map from note.ids to openreview.Note objects for one forum
+       forum_pairs: possible (review, rebuttal) pairs in the forum
+  """
   sid_map = {}
   ordered_notes = sorted(note_map.values(), key=lambda x:x.tcdate)
-  seen_notes = set()
+  # Order all notes (comments) in a forum by their time of creation.
+  # Note: sometimes this results in clearly out-of-order comments.
+  # This needs to be addressed manually on a case-by-case basis.
 
   relevant_sids = set()
+  # Gather definite super_ids (top comment structurally of a review or rebuttal)
   for pair in forum_pairs:
     relevant_sids.add(pair.review_sid)
     relevant_sids.add(pair.rebuttal_sid)
 
+  seen_notes = set()
   for i, note in enumerate(ordered_notes):
     if note.id in seen_notes:
       continue
     siblings = [sib.id
             for sib in ordered_notes[i+1:]
             if sib.replyto == note.replyto
-            and flatten_signature(sib) == flatten_signature(note)]
+            and flatten_signature(sib) == flatten_signature(note)] 
+    # Siblings by the same author
     descendants = get_descendant_path(note.id, ordered_notes)
+    # Descendants by the same author (no breaks)
+
     if siblings and descendants: # This is too complicated to detangle
       continue
     else:
+      # Otherwise, add siblings or descendants of the super note to the map.
       if note.id in relevant_sids:
           notes = [note.id] + siblings + descendants
           seen_notes.update(notes)
