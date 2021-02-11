@@ -8,22 +8,20 @@ import torch
 from nltk.corpus import stopwords
 from nltk.stem.porter import PorterStemmer
 from rank_bm25 import BM25Okapi
-from sentence_transformers import SentenceTransformer
+#from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
 import openreview_lib as orl
-
-SENTENCE_TRANSFORMER_MODEL = SentenceTransformer('paraphrase-distilroberta-base-v1')
-
 
 STEMMER = PorterStemmer()
 STOPWORDS = stopwords.words('english')
 
 
 def preprocess(sentence_tokens):
-  return [STEMMER.stem(word).lower()
-      for word in sentence_tokens
-      if word.lower() not in STOPWORDS]
+  return [
+      STEMMER.stem(word).lower() for word in sentence_tokens
+      if word.lower() not in STOPWORDS
+  ]
 
 
 def dir_fix(dir_name):
@@ -44,10 +42,9 @@ def get_review_and_rebuttal_sentences(pair, pair_output_dir):
   sentences = []
   for comment_type in ["review", "rebuttal"]:
     comment_sentences = get_sentences_from_chunks(pair[comment_type + "_text"])
-    embeddings = SENTENCE_TRANSFORMER_MODEL.encode(
-          [" ".join(sentence) for sentence in comment_sentences])
-    torch.save(embeddings, pair_output_dir + comment_type + ".pt")
-
+    with open(pair_output_dir + comment_type + ".txt", 'w') as f:
+      f.write("\n".join([" ".join(sentence)
+                         for sentence in comment_sentences]))
     sentences.append(comment_sentences)
   return sentences
 
@@ -72,8 +69,8 @@ def main():
       pair_output_dir = "/".join([output_dir, str(pair_index), ""])
       dir_fix(pair_output_dir)
       (review_sentences,
-          rebuttal_sentences) = get_review_and_rebuttal_sentences(pair,
-              pair_output_dir)
+       rebuttal_sentences) = get_review_and_rebuttal_sentences(
+           pair, pair_output_dir)
       for j, sentence in enumerate(review_sentences):
         corpus_builder[(dataset, pair_index, j)] = preprocess(sentence)
       for j, sentence in enumerate(rebuttal_sentences):

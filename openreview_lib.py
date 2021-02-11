@@ -10,15 +10,18 @@ random.seed(47)
 ForumList = collections.namedtuple("ForumList",
                                    "conference forums url".split())
 
-Pair = collections.namedtuple("Pair",
-  "forum review_sid rebuttal_sid title review_author".split())
+Pair = collections.namedtuple(
+    "Pair", "forum review_sid rebuttal_sid title review_author".split())
 
-Example = collections.namedtuple("Example",
-  ("index review_sid rebuttal_sid review_text rebuttal_text "
-   "title review_author forum labels").split())
+Example = collections.namedtuple(
+    "Example", ("index review_sid rebuttal_sid review_text rebuttal_text "
+                "title review_author forum labels").split())
 
-ClassificationExample = collections.namedtuple("ClassificationExample",
-  ("index sid text forum_title top_comment_title  author forum labels").split())
+ClassificationExample = collections.namedtuple(
+    "ClassificationExample",
+    ("index sid text forum_title top_comment_title  author forum labels"
+     ).split())
+
 
 class Conference(object):
   iclr18 = "iclr18"
@@ -45,13 +48,12 @@ DATASETS = [
     Split.TRAINDEV + "_" + SubSplit.DEV,
     Split.TRAINDEV + "_" + SubSplit.TEST,
     Split.TRUETEST,
-    ]
-
+]
 
 INVITATION_MAP = {
-    Conference.iclr18:'ICLR.cc/2018/Conference/-/Blind_Submission',
-    Conference.iclr19:'ICLR.cc/2019/Conference/-/Blind_Submission',
-    Conference.iclr20:'ICLR.cc/2020/Conference/-/Blind_Submission',
+    Conference.iclr18: 'ICLR.cc/2018/Conference/-/Blind_Submission',
+    Conference.iclr19: 'ICLR.cc/2019/Conference/-/Blind_Submission',
+    Conference.iclr20: 'ICLR.cc/2020/Conference/-/Blind_Submission',
 }
 
 
@@ -70,12 +72,12 @@ def flatten_signature(note):
      Tbh it looks like most signatures are actually only 1 author long..
   """
   assert len(note.signatures) == 1
-  return  "|".join(sorted(sig.split("/")[-1] for sig in note.signatures))
+  return "|".join(sorted(sig.split("/")[-1] for sig in note.signatures))
 
 
 def shorten_author(author):
   # TODO: do this way earlier
-  assert "|" not in author # Only one signature per comment, I hope
+  assert "|" not in author  # Only one signature per comment, I hope
   if "Author" in author:
     return AuthorCategories.AUTHOR
   if "Conference" in author:
@@ -92,7 +94,7 @@ def shorten_author(author):
     assert author.startswith("~")
     return AuthorCategories.NAMED
 
-  
+
 def get_descendant_path(sid, ordered_notes):
   """Get a path of descendants that share the same author.
 
@@ -120,13 +122,13 @@ def get_descendant_path(sid, ordered_notes):
       # not always true unfortunately
       continue
     else:
-      if (note.replyto == descendants[-1].id 
-              and flatten_signature(note) == flatten_signature(descendants[-1])):
+      if (note.replyto == descendants[-1].id
+          and flatten_signature(note) == flatten_signature(descendants[-1])):
         descendants.append(note)
   return [desc.id for desc in descendants[1:]]
 
 
-def build_sid_map(note_map, forum_pairs):    
+def build_sid_map(note_map, forum_pairs):
   """Builds a map from top comment ids to their continuation descendants.
     
      Args:
@@ -134,7 +136,7 @@ def build_sid_map(note_map, forum_pairs):
        forum_pairs: possible (review, rebuttal) pairs in the forum
   """
   sid_map = {}
-  ordered_notes = sorted(note_map.values(), key=lambda x:x.tcdate)
+  ordered_notes = sorted(note_map.values(), key=lambda x: x.tcdate)
   # Order all notes (comments) in a forum by their time of creation.
   # Note: sometimes this results in clearly out-of-order comments.
   # This needs to be addressed manually on a case-by-case basis.
@@ -149,22 +151,22 @@ def build_sid_map(note_map, forum_pairs):
   for i, note in enumerate(ordered_notes):
     if note.id in seen_notes:
       continue
-    siblings = [sib.id
-            for sib in ordered_notes[i+1:]
-            if sib.replyto == note.replyto
-            and flatten_signature(sib) == flatten_signature(note)] 
+    siblings = [
+        sib.id for sib in ordered_notes[i + 1:] if sib.replyto == note.replyto
+        and flatten_signature(sib) == flatten_signature(note)
+    ]
     # Siblings by the same author
     descendants = get_descendant_path(note.id, ordered_notes)
     # Descendants by the same author (no breaks)
 
-    if siblings and descendants: # This is too complicated to detangle
+    if siblings and descendants:  # This is too complicated to detangle
       continue
     else:
       # Otherwise, add siblings or descendants of the super note to the map.
       if note.id in relevant_sids:
-          notes = [note.id] + siblings + descendants
-          seen_notes.update(notes)
-          sid_map[note.id] = notes
+        notes = [note.id] + siblings + descendants
+        seen_notes.update(notes)
+        sid_map[note.id] = notes
 
   return sid_map
 
@@ -182,37 +184,38 @@ def get_forum_pairs(forum_id, note_map):
   """
 
   title = note_map[forum_id].content["title"]
-  top_children = [note
-                  for note in note_map.values()
-                  if note.replyto == forum_id]
-  review_ids = [note.id
-                for note in top_children
-                if shorten_author(
-                    flatten_signature(note)
-                ) == AuthorCategories.REVIEWER and 'review' in note.content]
+  top_children = [
+      note for note in note_map.values() if note.replyto == forum_id
+  ]
+  review_ids = [
+      note.id for note in top_children
+      if shorten_author(flatten_signature(note)) == AuthorCategories.REVIEWER
+      and 'review' in note.content
+  ]
   # Replies to the dummy 'Forum' node that are written by a Reviewer and have a
   # "review" item in their content (so not just a comment by a reviewer) count
   # as reviews.
   pairs = []
-  
+
   for review_id in review_ids:
-    candidate_responses = sorted([note
-        for note in note_map.values()
-        if note.replyto == review_id and shorten_author(
-              flatten_signature(note)) == AuthorCategories.AUTHOR ], 
-              key=lambda x:x.cdate)
+    candidate_responses = sorted([
+        note for note in note_map.values() if note.replyto == review_id
+        and shorten_author(flatten_signature(note)) == AuthorCategories.AUTHOR
+    ],
+                                 key=lambda x: x.cdate)
     # Candidate responses are responses to a known review note which are written
     # by the Authors.
     if not candidate_responses:
       continue
     else:
-      super_response = candidate_responses[0] # This should be the earliest
+      super_response = candidate_responses[0]  # This should be the earliest
       pairs.append(
-        Pair(forum=forum_id, title=title,
-             review_sid=review_id,
-             rebuttal_sid=super_response.id,
-             review_author=flatten_signature(
-               note_map[super_response.replyto])))
+          Pair(forum=forum_id,
+               title=title,
+               review_sid=review_id,
+               rebuttal_sid=super_response.id,
+               review_author=flatten_signature(
+                   note_map[super_response.replyto])))
 
   return pairs
 
@@ -237,37 +240,40 @@ def get_review_rebuttal_pairs(forums, or_client):
 
   print("Getting forums")
   for forum_id in tqdm(forums):
-    note_map = {note.id: note
-            for note in or_client.get_notes(forum=forum_id)}
+    note_map = {note.id: note for note in or_client.get_notes(forum=forum_id)}
 
     forum_pairs = get_forum_pairs(forum_id, note_map)
     # Sometimes these aren't supernotes e.g. when there are two candidate
     # supernotes and they have to be ordered by timestamp.
     forum_sid_map = build_sid_map(note_map, forum_pairs)
-    sid_pairs = [pair 
-                 for pair in forum_pairs
-                 if (pair.rebuttal_sid in forum_sid_map
-                     and pair.review_sid in forum_sid_map)]
+    sid_pairs = [
+        pair for pair in forum_pairs if (pair.rebuttal_sid in forum_sid_map
+                                         and pair.review_sid in forum_sid_map)
+    ]
     # Above: ensuring that we don't have pairs for which the note has actually
     # been deleted.
 
     for pair in sid_pairs:
       assert pair.review_sid in forum_sid_map
-      assert pair.rebuttal_sid in forum_sid_map # Double checking, lol
+      assert pair.rebuttal_sid in forum_sid_map  # Double checking, lol
 
-    assert (len(sid_pairs) == len(set(sid_pairs)) # Triple checking
-            == len(set(x.review_sid for x in sid_pairs))
-            == len(set(x.rebuttal_sid for x in sid_pairs)))
+    assert (len(sid_pairs) == len(set(sid_pairs))  # Triple checking
+            == len(set(x.review_sid for x in sid_pairs)) == len(
+                set(x.rebuttal_sid for x in sid_pairs)))
 
     sid_map[forum_id] = forum_sid_map
     review_rebuttal_pairs += sid_pairs
 
-  full_sid_map = {} # This is a map for sids from all the forums
+  full_sid_map = {}  # This is a map for sids from all the forums
   for forum_id, forum_sid_map in sid_map.items():
-    id_to_note_map = {note.id:note
-        for note in or_client.get_notes(forum=forum_id)} 
-    full_sid_map[forum_id] = {k:[id_to_note_map[i] for i in v]
-                              for k, v in forum_sid_map.items()}
+    id_to_note_map = {
+        note.id: note
+        for note in or_client.get_notes(forum=forum_id)
+    }
+    full_sid_map[forum_id] = {
+        k: [id_to_note_map[i] for i in v]
+        for k, v in forum_sid_map.items()
+    }
 
   return full_sid_map, review_rebuttal_pairs
 
@@ -284,13 +290,14 @@ def get_text(note):
     assert False
     return ""
   else:
-    for text_type in ["review", "comment", "withdrawal confirmation",
-            "metareview"]:
+    for text_type in [
+        "review", "comment", "withdrawal confirmation", "metareview"
+    ]:
       if text_type in note.content:
         return note.content[text_type]
     assert False
 
-    
+
 def get_text_from_note_list(note_list, pipeline):
   supernote_text = "\n\n".join(get_text(subnote) for subnote in note_list)
   chunks = Text(supernote_text, pipeline).chunks
@@ -306,9 +313,8 @@ class Text(object):
         self.chunks.append([])
       else:
         annotated = pipeline(chunk_text)
-        chunk = [[x.text
-                    for x in sentence.tokens]
-                    for sentence in annotated.sentences]
+        chunk = [[x.text for x in sentence.tokens]
+                 for sentence in annotated.sentences]
         self.chunks.append(chunk)
 
 
@@ -318,11 +324,11 @@ def get_classification_labels(notes):
   for key in ["rating", "confidence"]:
     if key in top_comment.content:
       labels[key] = int(top_comment.content[key].split(":")[0])
-  return labels 
+  return labels
 
 
-def get_classification_examples(pairs, review_or_rebuttal,
-    sid_map, corenlp_client):
+def get_classification_examples(pairs, review_or_rebuttal, sid_map,
+                                corenlp_client):
   """ Gets text of review or rebuttal along with categorical labels.
 
       Args:
@@ -344,15 +350,15 @@ def get_classification_examples(pairs, review_or_rebuttal,
     else:
       sid = pair.rebuttal_sid
     relevant_notes = sid_map[pair.forum][sid]
-    top_comment_title = relevant_notes[0].content["title"] 
+    top_comment_title = relevant_notes[0].content["title"]
     text = get_text_from_note_list(relevant_notes, corenlp_client)
     labels = get_classification_labels(relevant_notes)
-    examples.append(ClassificationExample(
-      i, sid, text, pair.title, top_comment_title, pair.review_author,
-      pair.forum, labels)._asdict())
+    examples.append(
+        ClassificationExample(i, sid, text, pair.title, top_comment_title,
+                              pair.review_author, pair.forum,
+                              labels)._asdict())
 
   return examples
-
 
 
 def get_pair_text(pairs, sid_map, pipeline):
@@ -371,15 +377,16 @@ def get_pair_text(pairs, sid_map, pipeline):
 
   print("Processing pairs")
   for i, pair in tqdm(list(enumerate(pairs))):
-    review_text = get_text_from_note_list(
-        sid_map[pair.forum][pair.review_sid], pipeline)
+    review_text = get_text_from_note_list(sid_map[pair.forum][pair.review_sid],
+                                          pipeline)
     rebuttal_text = get_text_from_note_list(
         sid_map[pair.forum][pair.rebuttal_sid], pipeline)
-    examples.append(Example(
-      i, pair.review_sid, pair.rebuttal_sid, review_text, rebuttal_text,
-      pair.title, pair.review_author, pair.forum,
-      get_classification_labels(
-        sid_map[pair.forum][pair.review_sid]))._asdict())
+    examples.append(
+        Example(
+            i, pair.review_sid, pair.rebuttal_sid, review_text, rebuttal_text,
+            pair.title, pair.review_author, pair.forum,
+            get_classification_labels(
+                sid_map[pair.forum][pair.review_sid]))._asdict())
 
   return examples
 
@@ -399,18 +406,21 @@ def get_abstract_texts(forums, or_client, pipeline):
   abstracts = []
   print("Getting abstracts")
   for forum_id in tqdm(forums):
-    root_getter = [note
-        for note in or_client.get_notes(forum=forum_id)
-        if note.id == forum_id]
+    root_getter = [
+        note for note in or_client.get_notes(forum=forum_id)
+        if note.id == forum_id
+    ]
     assert len(root_getter) == 1
     root, = root_getter
     abstract_text = root.content["abstract"]
     abstracts.append(Text(abstract_text, pipeline).chunks)
   return abstracts
 
+
 def get_all_conference_forums(conference, client):
-  return list(openreview.tools.iterget_notes(
-    client, invitation=INVITATION_MAP[conference]))
+  return list(
+      openreview.tools.iterget_notes(client,
+                                     invitation=INVITATION_MAP[conference]))
 
 
 def get_sampled_forums(conference, client, sample_rate):
@@ -423,10 +433,11 @@ def get_sampled_forums(conference, client, sample_rate):
       Returns:
         ForumList containing sampled forums and metadata
   """
-  forums = [forum.id
-            for forum in get_all_conference_forums(conference, client)]
+  forums = [
+      forum.id for forum in get_all_conference_forums(conference, client)
+  ]
   if sample_rate == 1:
-    pass # Just send everything through
+    pass  # Just send everything through
   else:
     random.shuffle(forums)
     forums = forums[:int(sample_rate * len(forums))]
@@ -445,17 +456,16 @@ def get_sub_split_forum_map(conference, guest_client, sample_frac):
         sub_split_forum_map: Map from  "train"/"dev"/"test" to a list of forum
         ids
   """
-    
+
   forums = get_sampled_forums(conference, guest_client, sample_frac).forums
   random.shuffle(forums)
   offsets = {
-      SubSplit.DEV :(0, int(0.2*len(forums))),
-      SubSplit.TRAIN : (int(0.2*len(forums)), int(0.8*len(forums))),
-      SubSplit.TEST : (int(0.8*len(forums)), int(1.1*len(forums)))
-      }
+      SubSplit.DEV: (0, int(0.2 * len(forums))),
+      SubSplit.TRAIN: (int(0.2 * len(forums)), int(0.8 * len(forums))),
+      SubSplit.TEST: (int(0.8 * len(forums)), int(1.1 * len(forums)))
+  }
   sub_split_forum_map = {
       sub_split: forums[start:end]
       for sub_split, (start, end) in offsets.items()
-      }
+  }
   return sub_split_forum_map
-
