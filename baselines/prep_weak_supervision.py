@@ -170,7 +170,7 @@ def create_weak_supervision_examples_and_write(results, data_dir):
 
 
 def main():
-  data_dir = "../unlabeled/"
+  data_dir = "../review_rebuttal_pair_dataset_debug/"
   corpus_map, query_map = gather_datasets(data_dir)
   write_datasets_to_file(corpus_map, query_map, data_dir)
   results = score_datasets_and_write(corpus_map, query_map, data_dir)
