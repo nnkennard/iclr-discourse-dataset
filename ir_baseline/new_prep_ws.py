@@ -54,7 +54,7 @@ def get_review_and_rebuttal_sentences(pair, pair_output_dir):
 
 def main():
 
-  data_dir = "../review_rebuttal_pair_dataset_debug/"
+  data_dir = "../review_rebuttal_pair_dataset/"
   output_dir = data_dir + "/ws/"
   dir_fix(output_dir)
 
@@ -82,7 +82,7 @@ def main():
   model = BM25Okapi(corpus_builder.values())
 
   relevant_scores_map = collections.OrderedDict()
-  for query_idx, preprocessed_query in query_builder.items():
+  for query_idx, preprocessed_query in tqdm(query_builder.items()):
     scores = model.get_scores(preprocessed_query)
     relevant_scores = []
     for doc_idx, score in zip(corpus_builder.keys(), scores.tolist()):
