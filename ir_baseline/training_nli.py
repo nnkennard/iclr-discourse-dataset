@@ -1,20 +1,10 @@
-"""
-The system trains BERT (or any other transformer model like RoBERTa, DistilBERT etc.) on the SNLI + MultiNLI (AllNLI) dataset
-with softmax loss function. At every 1000 training steps, the model is evaluated on the
-STS benchmark dataset
-
-Usage:
-python training_nli.py
-
-OR
-python training_nli.py pretrained_transformer_model_name
-"""
 import argparse
+import collections
 from torch.utils.data import DataLoader
 import math
 from sentence_transformers import models, losses
 from sentence_transformers import LoggingHandler, SentenceTransformer, util, InputExample
-from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
+from sentence_transformers.evaluation import BinaryClassificationEvaluator
 import logging
 from datetime import datetime
 import sys
@@ -22,11 +12,12 @@ import os
 import gzip
 import glob
 import csv
+import pickle
 
 parser = argparse.ArgumentParser(
     description='Build database of review-rebuttal pairs')
 parser.add_argument('-i', '--inputdir',
-    default="../review_rebuttal_pair_dataset/ws/",
+    default="../review_rebuttal_pair_dataset_debug/ws/",
     type=str, help='path to database file')
 parser.add_argument('-d', '--debug', action='store_true',
                     help='truncate to small subset of data for debugging')
@@ -63,27 +54,47 @@ def build_model():
   model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
   return model
 
+def get_stripped_lines(filename):
+  with open(filename, 'r') as f:
+    return [l.strip() for l in f.readlines()]
 
-def build_samples(train_dir):
+def get_this_review_lines(rebuttal_idx, keys, review_lines):
+  reb_split, reb_example, reb_line = keys["query_keys"][rebuttal_idx]
+  this_review_indices = []
+  for rev_i, (split, example, _) in enumerate(keys["corpus_keys"]):
+    if split == reb_split and example == reb_example:
+      this_review_indices.append(rev_i)
+
+def build_samples(train_dir, dataset, example_index, scores):
+  examples_dir = "/".join([train_dir, dataset, str(example_index), ""])
   train_samples = []
-  train_samples.append(InputExample(texts=["hi friend!", "hello friend!"], label=0))
-  train_samples.append(InputExample(texts=["bye friend!", "see ya friend!"], label=1))
+  review_lines = get_stripped_lines(examples_dir + "review.txt")
+  rebuttal_lines = get_stripped_lines(examples_dir + "rebuttal.txt")
+
+  reb_scores = scores[(dataset, example_index)]
+  for reb_i, sent_scores in reb_scores.items():
+    for rev_i, score_i in enumerate(sent_scores):
+      for rev_j, score_j in enumerate(sent_scores):
+        if score_i > score_j:
+          label = 0
+        else:
+          label = 1
+        text_1 = review_lines[rev_i] + " BREAK " + rebuttal_lines[reb_i]
+        text_2 = review_lines[rev_j] + " BREAK " + rebuttal_lines[reb_i]
+        train_samples.append(InputExample(texts=[text_1, text_2], label=label))
+        if len(train_samples) > 100:
+          return train_samples
+
   return train_samples
-  with gzip.open(nli_dataset_path, 'rt', encoding='utf8') as fIn:
-    reader = csv.DictReader(fIn, delimiter='\t', quoting=csv.QUOTE_NONE)
-    for row in reader:
-      if row['split'] == 'train':
-        label_id = label2int[row['label']]
-        train_samples.append(InputExample(texts=[qd_1, qd_2], label=label_id))
 
 
-def build_dataloader(input_dir, batch_size):
-  samples = build_samples(input_dir)
+def build_dataloader(input_dir, dataset, example_index, scores, batch_size):
+  samples = build_samples(input_dir, dataset, example_index, scores)
   return DataLoader(samples, shuffle=True, batch_size=batch_size)
 
 
 # Configure the training
-num_epochs = 1
+num_epochs = 15
 
 
 def main():
@@ -96,13 +107,30 @@ def main():
       sentence_embedding_dimension=model.get_sentence_embedding_dimension(),
       num_labels=NUM_LABELS)
 
-  dev_samples = build_samples(args.inputdir)
-  dev_evaluator = EmbeddingSimilarityEvaluator.from_input_examples(
+  score_map = collections.defaultdict(lambda : collections.defaultdict())
+  with open(args.inputdir + "/scores.pickle", 'rb') as f:
+    scores = pickle.load(f)
+
+  for key, score_list in scores.items():
+    dataset, pair_index = key
+    if 'test' in dataset:
+      continue
+    for rev_i, score in enumerate(score_list):
+      score_map[key][rev_i] = score
+
+  dev_samples = sum([
+    build_samples(args.inputdir, "traindev_dev", i, score_map)
+    for i in range(6)
+    ], [])
+  dev_evaluator = BinaryClassificationEvaluator.from_input_examples(
       dev_samples, batch_size=TRAIN_BATCH_SIZE, name='sts-dev')
 
   for epoch_i in range(num_epochs):
-    for train_folder in glob.glob(args.inputdir + "/*"):
-      train_loader = build_dataloader(train_folder, TRAIN_BATCH_SIZE)
+    num_examples = len(glob.glob(args.inputdir +"/traindev_train/*")) - 2
+    num_examples = 20
+    for example_i in range(num_examples):
+      train_loader = build_dataloader(args.inputdir, "traindev_train",
+          example_i, score_map, TRAIN_BATCH_SIZE)
       warmup_steps = math.ceil(len(train_loader) *
                                0.1)  #10% of train data for warm-up
       model.fit(train_objectives=[(train_loader, train_loss)],
@@ -111,6 +139,10 @@ def main():
                 evaluation_steps=1000,
                 warmup_steps=warmup_steps,
                 output_path=model_save_path)
+      for input_ids, labels in train_loader:
+        print(train_loss(input_ids, None))
+        #output = model(input_ids)
+        #print(output)
 
 
 if __name__ == "__main__":

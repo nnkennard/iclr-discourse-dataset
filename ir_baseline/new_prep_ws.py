@@ -80,8 +80,12 @@ def main():
   output_dir = data_dir + "/ws/"
   dir_fix(output_dir)
 
-  corpus_builder = get_builder()
-  query_builder = get_builder()
+  #corpus_builder = get_builder()
+  #query_builder = get_builder()
+
+  corpus = []
+  corpus_index_map = {}
+  queries = []
 
   for dataset in orl.DATASETS:
     if 'traindev' not in dataset:
@@ -92,36 +96,36 @@ def main():
 
     for pair in tqdm(obj["review_rebuttal_pairs"]):
       pair_index = pair["index"]
-      pair_output_dir = "/".join([output_dir, str(pair_index), ""])
+      pair_output_dir = "/".join([output_dir, dataset, str(pair_index), ""])
       dir_fix(pair_output_dir)
       (review_sentences,
        rebuttal_sentences) = get_review_and_rebuttal_sentences(
            pair, pair_output_dir)
-      for j, sentence in enumerate(review_sentences):
-        corpus_builder[dataset][(pair_index, j)] = preprocess(sentence)
-      for j, sentence in enumerate(rebuttal_sentences):
-        query_builder[dataset][(pair_index, j)] = preprocess(sentence)
+      start_index = len(corpus)
+      corpus += [preprocess(sentence) for sentence in review_sentences]
+      corpus_index_map[
+          (dataset, pair_index)] = (start_index, 
+                                    start_index + len(review_sentences))
+      for j, query_sentence in enumerate(rebuttal_sentences):
+        queries.append((dataset, pair_index, j, preprocess(query_sentence)))
 
-  corpus_keys, corpus = texts_from_builder(corpus_builder)
-  query_keys, queries = texts_from_builder(query_builder)
   model = BM25Okapi(corpus)
 
-  relevant_scores_map = collections.OrderedDict()
-  for query_i, preprocessed_query in tqdm(enumerate(queries)):
-    query_key = query_keys[query_i]
-    min_idx, max_idx = get_corpus_indices(query_key, corpus_keys)
+  relevant_scores_map = collections.defaultdict(list)
+  for dataset, pair_i, sentence_i, preprocessed_query in queries:
     scores = model.get_scores(preprocessed_query)
-    relevant_scores = [score for score in range(min_idx, max_idx + 1)]
-    relevant_scores_map[query_i] = np.array(relevant_scores)
-
+    start, exclusive_end = corpus_index_map[(dataset, pair_i)]
+    relevant_scores = scores[start:exclusive_end]
+    relevant_scores_map[(dataset, pair_i)].append(np.array(relevant_scores))
+  
   with open(output_dir + "scores.pickle", 'wb') as f:
     pickle.dump(relevant_scores_map, f)
 
-  with open(output_dir + "keys.pickle", 'wb') as f:
-    pickle.dump({
-      "corpus_keys": corpus_keys,
-      "query_keys": query_keys
-      }, f)
+  #with open(output_dir + "keys.pickle", 'wb') as f:
+  #  pickle.dump({
+  #    "corpus_keys": corpus_keys,
+  #    "query_keys": query_keys
+  #    }, f)
 
 
 
