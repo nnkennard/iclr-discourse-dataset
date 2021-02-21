@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 import math
 from sentence_transformers import models, losses
 from sentence_transformers import LoggingHandler, SentenceTransformer, util, InputExample
-from sentence_transformers.evaluation import BinaryClassificationEvaluator
+from BasicEvaluator  import BasicEvaluator
 import logging
 from datetime import datetime
 import sys
@@ -122,8 +122,8 @@ def main():
     build_samples(args.inputdir, "traindev_dev", i, score_map)
     for i in range(6)
     ], [])
-  dev_evaluator = BinaryClassificationEvaluator.from_input_examples(
-      dev_samples, batch_size=TRAIN_BATCH_SIZE, name='sts-dev')
+  dev_evaluator = BasicEvaluator.from_input_examples(
+      dev_samples, model, batch_size=TRAIN_BATCH_SIZE, name='sts-dev')
 
   for epoch_i in range(num_epochs):
     num_examples = len(glob.glob(args.inputdir +"/traindev_train/*")) - 2
