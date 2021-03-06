@@ -5,6 +5,12 @@ import re
 
 from tqdm import tqdm
 
+
+from spacy.lang.en import English
+spacy_nlp = English()
+spacy_nlp.add_pipe("sentencizer")
+
+
 random.seed(47)
 
 ForumList = collections.namedtuple("ForumList",
@@ -16,6 +22,13 @@ Pair = collections.namedtuple(
 Example = collections.namedtuple(
     "Example", ("index review_sid rebuttal_sid review_text rebuttal_text "
                 "title review_author forum labels").split())
+
+Sentence = collections.namedtuple("Sentence", "start_index end_index suffix")
+Comment = collections.namedtuple("Comment", "text sentences")
+
+def make_sentence_dict(start, end, suffix):
+  return Sentence(start, end, suffix)._asdict()
+
 
 ClassificationExample = collections.namedtuple(
     "ClassificationExample",
@@ -298,26 +311,45 @@ def get_text(note):
     assert False
 
 
-def get_text_from_note_list(note_list, pipeline):
+def get_text_from_note_list(note_list):
   supernote_text = "\n\n".join(get_text(subnote) for subnote in note_list)
-  chunks = Text(supernote_text, pipeline).chunks
-  return chunks
+  return Text(supernote_text).text
 
 
 class Text(object):
-  def __init__(self, text, pipeline):
-    self.chunks = []
-    chunk_texts = [chunk.strip() for chunk in text.split("\n")]
-    for chunk_text in chunk_texts:
-      if not chunk_text:
-        self.chunks.append([])
-      else:
-        annotated = pipeline(chunk_text)
-        chunk = [[x.text for x in sentence.tokens]
-                 for sentence in annotated.sentences]
-        self.chunks.append(chunk)
+  def __init__(self, text):
+    sentence_texts = []
+    sentence_indices = []
+    for chunk in text.split("\n"):
+      doc = spacy_nlp(chunk)
+      for sent in doc.sents:
+        sentence_text = sent.text.strip()
+        if not sentence_text:
+          continue
+        if sentence_indices:
+          offset = sentence_indices[-1][1]
+          index = offset + text[offset:].find(sentence_text)
+        else:
+          index = text.find(sentence_text)
+        sentence_texts.append(sentence_text)
+        sentence_indices.append((index, index + len(sentence_text)))
+    assert len(sentence_texts) == len(sentence_indices)
+    final_sentences = []
+    for i in range(len(sentence_texts) - 1):
+      start, end = sentence_indices[i]
+      sentence_text = sentence_texts[i]
+      next_sentence_start = sentence_indices[i+1][0]
+      suffix = "\n" * text[end:next_sentence_start].count("\n")
+      assert sentence_text == text[start:end]
+      final_sentences.append(make_sentence_dict(start, end, suffix))
+
+    final_start, final_end = sentence_indices[-1]
+    final_sentences.append(make_sentence_dict(final_start, final_end, ""))
+    
+    self.text = Comment(text, final_sentences)._asdict()
 
 
+    
 def get_classification_labels(notes):
   top_comment = notes[0]
   labels = {}
@@ -361,7 +393,7 @@ def get_classification_examples(pairs, review_or_rebuttal, sid_map,
   return examples
 
 
-def get_pair_text(pairs, sid_map, pipeline):
+def get_pair_text(pairs, sid_map):
   """ Get review and rebuttal text along with metadata and labels.
       
       Args:
@@ -377,10 +409,9 @@ def get_pair_text(pairs, sid_map, pipeline):
 
   print("Processing pairs")
   for i, pair in tqdm(list(enumerate(pairs))):
-    review_text = get_text_from_note_list(sid_map[pair.forum][pair.review_sid],
-                                          pipeline)
+    review_text = get_text_from_note_list(sid_map[pair.forum][pair.review_sid])
     rebuttal_text = get_text_from_note_list(
-        sid_map[pair.forum][pair.rebuttal_sid], pipeline)
+        sid_map[pair.forum][pair.rebuttal_sid])
     examples.append(
         Example(
             i, pair.review_sid, pair.rebuttal_sid, review_text, rebuttal_text,
@@ -391,7 +422,7 @@ def get_pair_text(pairs, sid_map, pipeline):
   return examples
 
 
-def get_abstract_texts(forums, or_client, pipeline):
+def get_abstract_texts(forums, or_client):
   """From a list of forums, extract review and rebuttal pairs.
   
     Args:
@@ -413,7 +444,7 @@ def get_abstract_texts(forums, or_client, pipeline):
     assert len(root_getter) == 1
     root, = root_getter
     abstract_text = root.content["abstract"]
-    abstracts.append(Text(abstract_text, pipeline).chunks)
+    abstracts.append(Text(abstract_text).text)
   return abstracts
 
 
@@ -469,3 +500,35 @@ def get_sub_split_forum_map(conference, guest_client, sample_frac):
       for sub_split, (start, end) in offsets.items()
   }
   return sub_split_forum_map
+
+
+
+def my_sentencize(pipeline, text):
+  sentence_texts = []
+  sentence_indices = []
+  for chunk in original_content.split("\n"):
+    doc = pipeline(chunk)
+    for sent in doc.sents:
+      sentence_text = sent.text.strip()
+      if not sentence_text:
+        continue
+      index = original_content.find(sentence_text)
+      if sentence_indices:
+        assert index > sentence_indices[-1][0]
+      sentence_texts.append(sentence_text)
+      sentence_indices.append((index, index + len(sentence_text)))
+
+  assert len(sentence_texts) == len(sentence_indices)
+
+  final_sentences = []
+  for i in range(len(sentence_texts) - 1):
+    start, end = sentence_indices[i]
+    sentence_text = sentence_texts[i]
+    next_sentence_start = sentence_indices[i+1][0]
+    suffix = "\n" * original_content[end:next_sentence_start].count("\n")
+    final_sentences.append(Sentence(sentence_text, start, end, suffix))
+
+  final_start, final_end = sentence_indices[-1]
+  final_sentences.append(Sentence(sentence_texts[-1], final_start, final_end, ""))
+
+  return final_sentences

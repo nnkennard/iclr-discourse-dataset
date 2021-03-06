@@ -3,7 +3,6 @@ import collections
 import json
 import openreview
 import os
-import stanza
 import sys
 
 import openreview_lib as orl
@@ -15,17 +14,15 @@ parser.add_argument('-o', '--outputdir', default="review_rebuttal_pair_dataset/"
 parser.add_argument('-d', '--debug', action='store_true',
                     help='truncate to small subset of data for debugging')
 
-STANZA_PIPELINE = stanza.Pipeline(lang='en', processors='tokenize')
-
 def get_pair_text_from_forums(forums, guest_client):
   print("Getting pair text from ", len(forums), " forums")
   sid_map, pairs = orl.get_review_rebuttal_pairs(
       forums, guest_client)
-  return orl.get_pair_text(pairs, sid_map, STANZA_PIPELINE)
+  return orl.get_pair_text(pairs, sid_map)
 
 def get_abstracts_from_forums(forums, guest_client):
   print("Getting abstracts")
-  return orl.get_abstract_texts(forums, guest_client, STANZA_PIPELINE)
+  return orl.get_abstract_texts(forums, guest_client)
 
 def get_unstructured(conference, guest_client, output_dir, sample_frac):
   """ Get unstructured data for domain pretraining.
