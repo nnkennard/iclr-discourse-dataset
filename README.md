@@ -15,6 +15,7 @@ python -c "import stanza; stanza.download('en')"
 
 2. Run code to create datasets
 ```
+mkdir data
 python build_pair_datasets.py [--debug]
 ```
 Adding the `--debug` flag creates smaller datasets, better for viewing and testing. They are created in a folder whose name ends in `_debug`.

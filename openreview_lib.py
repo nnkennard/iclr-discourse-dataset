@@ -1,4 +1,5 @@
 import collections
+from difflib import SequenceMatcher
 import openreview
 import random
 import re
@@ -21,7 +22,7 @@ Pair = collections.namedtuple(
 
 Example = collections.namedtuple(
     "Example", ("index review_sid rebuttal_sid review_text rebuttal_text "
-                "title review_author forum labels").split())
+                "title review_author forum labels exact_matches").split())
 
 Sentence = collections.namedtuple("Sentence", "start_index end_index suffix")
 Comment = collections.namedtuple("Comment", "text sentences")
@@ -343,12 +344,52 @@ class Text(object):
       assert sentence_text == text[start:end]
       final_sentences.append(make_sentence_dict(start, end, suffix))
 
-    final_start, final_end = sentence_indices[-1]
-    final_sentences.append(make_sentence_dict(final_start, final_end, ""))
+    if sentence_indices:
+        final_start, final_end = sentence_indices[-1]
+        final_sentences.append(make_sentence_dict(final_start, final_end, ""))
     
     self.text = Comment(text, final_sentences)._asdict()
 
 
+
+def match_wrapper(sent1, sent2):
+  return SequenceMatcher(None, sent1, sent2).find_longest_match(
+    0, len(sent1), 0, len(sent2))
+
+
+class CommentNavigator(object):
+  def __init__(self, json_rep):
+    self.text = json_rep["text"]
+    self.sentences = [Sentence(
+    sent["start_index"], sent["end_index"], sent["suffix"],
+        ) for sent in json_rep["sentences"]]
+            
+  def sentence_texts(self):
+    return [self.text[sent.start_index:sent.end_index]+sent.suffix for sent in self.sentences]
+
+
+MatchInfo = collections.namedtuple("MatchInfo",
+  "review_sentence rebuttal_sentence review_offset rebuttal_offset size".split())
+
+    
+def get_exact_matches(review_text, rebuttal_text):
+  review = CommentNavigator(review_text)
+  rebuttal = CommentNavigator(rebuttal_text)
+  review_sentences = review.sentence_texts()
+  rebuttal_matches = []
+  for reb_i, reb_sent in enumerate(rebuttal.sentence_texts()):
+    best_match = None
+    for rev_i, rev_sent in enumerate(review_sentences):
+      match = match_wrapper(rev_sent, reb_sent)
+      if match.size < 5:
+        continue
+      if best_match is None or best_match["size"] < match.size :
+        best_match = MatchInfo(rev_i, reb_i, match.a, match.b,
+                match.size)._asdict()
+    if best_match is not None:
+        rebuttal_matches.append(best_match)
+  return rebuttal_matches
+ 
     
 def get_classification_labels(notes):
   top_comment = notes[0]
@@ -357,40 +398,6 @@ def get_classification_labels(notes):
     if key in top_comment.content:
       labels[key] = int(top_comment.content[key].split(":")[0])
   return labels
-
-
-def get_classification_examples(pairs, review_or_rebuttal, sid_map,
-                                corenlp_client):
-  """ Gets text of review or rebuttal along with categorical labels.
-
-      Args:
-        pairs: A list of review/rebuttal Pairs 
-        review_or_rebuttal: which to collect, "review" or "rebuttal"
-        sid_map: A map from super ids to the list of comments they encompass
-        corenlp_client: A corenlp client with at least ssplit, tokenize
-
-      Returns:
-        A list of ClassificationExamples.
-  """
-
-  assert review_or_rebuttal in ["review", "rebuttal"]
-
-  examples = []
-  for i, pair in tqdm(list(enumerate(pairs))):
-    if review_or_rebuttal == "review":
-      sid = pair.review_sid
-    else:
-      sid = pair.rebuttal_sid
-    relevant_notes = sid_map[pair.forum][sid]
-    top_comment_title = relevant_notes[0].content["title"]
-    text = get_text_from_note_list(relevant_notes, corenlp_client)
-    labels = get_classification_labels(relevant_notes)
-    examples.append(
-        ClassificationExample(i, sid, text, pair.title, top_comment_title,
-                              pair.review_author, pair.forum,
-                              labels)._asdict())
-
-  return examples
 
 
 def get_pair_text(pairs, sid_map):
@@ -407,17 +414,18 @@ def get_pair_text(pairs, sid_map):
 
   examples = []
 
-  print("Processing pairs")
   for i, pair in tqdm(list(enumerate(pairs))):
     review_text = get_text_from_note_list(sid_map[pair.forum][pair.review_sid])
     rebuttal_text = get_text_from_note_list(
         sid_map[pair.forum][pair.rebuttal_sid])
+    exact_matches = get_exact_matches(review_text, rebuttal_text)
     examples.append(
         Example(
             i, pair.review_sid, pair.rebuttal_sid, review_text, rebuttal_text,
             pair.title, pair.review_author, pair.forum,
             get_classification_labels(
-                sid_map[pair.forum][pair.review_sid]))._asdict())
+                sid_map[pair.forum][pair.review_sid]),
+            exact_matches)._asdict())
 
   return examples
 
@@ -500,35 +508,3 @@ def get_sub_split_forum_map(conference, guest_client, sample_frac):
       for sub_split, (start, end) in offsets.items()
   }
   return sub_split_forum_map
-
-
-
-def my_sentencize(pipeline, text):
-  sentence_texts = []
-  sentence_indices = []
-  for chunk in original_content.split("\n"):
-    doc = pipeline(chunk)
-    for sent in doc.sents:
-      sentence_text = sent.text.strip()
-      if not sentence_text:
-        continue
-      index = original_content.find(sentence_text)
-      if sentence_indices:
-        assert index > sentence_indices[-1][0]
-      sentence_texts.append(sentence_text)
-      sentence_indices.append((index, index + len(sentence_text)))
-
-  assert len(sentence_texts) == len(sentence_indices)
-
-  final_sentences = []
-  for i in range(len(sentence_texts) - 1):
-    start, end = sentence_indices[i]
-    sentence_text = sentence_texts[i]
-    next_sentence_start = sentence_indices[i+1][0]
-    suffix = "\n" * original_content[end:next_sentence_start].count("\n")
-    final_sentences.append(Sentence(sentence_text, start, end, suffix))
-
-  final_start, final_end = sentence_indices[-1]
-  final_sentences.append(Sentence(sentence_texts[-1], final_start, final_end, ""))
-
-  return final_sentences

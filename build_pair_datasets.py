@@ -9,19 +9,19 @@ import openreview_lib as orl
 
 parser = argparse.ArgumentParser(
     description='Build database of review-rebuttal pairs')
-parser.add_argument('-o', '--outputdir', default="review_rebuttal_pair_dataset/",
+parser.add_argument('-o', '--outputdir', default="data/review_rebuttal_pair_dataset/",
     type=str, help='path to database file')
 parser.add_argument('-d', '--debug', action='store_true',
                     help='truncate to small subset of data for debugging')
 
 def get_pair_text_from_forums(forums, guest_client):
-  print("Getting pair text from ", len(forums), " forums")
+  sys.stderr.write("Getting pair text from " + str(len(forums)) + " forums\n")
   sid_map, pairs = orl.get_review_rebuttal_pairs(
       forums, guest_client)
   return orl.get_pair_text(pairs, sid_map)
 
 def get_abstracts_from_forums(forums, guest_client):
-  print("Getting abstracts")
+  sys.stderr.write("Getting abstracts\n")
   return orl.get_abstract_texts(forums, guest_client)
 
 def get_unstructured(conference, guest_client, output_dir, sample_frac):
@@ -125,7 +125,7 @@ def main():
 
   # There are three splits:
   #   UNSTRUCTURED: for unstructured pretraining (like Don't Stop Pretraining
-  #   paper) (ICLLR 2018)
+  #   paper) (ICLR 2018)
   #   TRUETEST: totally unseen test set (ICLR 2020)
   #   TRAINDEV: normal train/dev/test split (ICLR 2019)
 

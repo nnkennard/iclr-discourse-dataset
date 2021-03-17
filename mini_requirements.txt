@@ -1,1 +1,0 @@
-requirements/mini_requirements.txt
