@@ -3,13 +3,17 @@ from difflib import SequenceMatcher
 import openreview
 import random
 import re
+import scispacy
+import spacy
 
 from tqdm import tqdm
 
 
-from spacy.lang.en import English
-spacy_nlp = English()
-spacy_nlp.add_pipe("sentencizer")
+#from spacy.lang.en import English
+#spacy_nlp = English()
+#spacy_nlp.add_pipe("sentencizer")
+
+scispacy_nlp = spacy.load("en_core_sci_scibert")
 
 
 random.seed(47)
@@ -322,7 +326,7 @@ class Text(object):
     sentence_texts = []
     sentence_indices = []
     for chunk in text.split("\n"):
-      doc = spacy_nlp(chunk)
+      doc = scispacy_nlp(chunk)
       for sent in doc.sents:
         sentence_text = sent.text.strip()
         if not sentence_text:
