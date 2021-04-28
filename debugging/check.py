@@ -7,9 +7,9 @@ import openreview_lib as orl
 
 parser = argparse.ArgumentParser(
     description='Check that generated dataset matches original')
-parser.add_argument('-i', '--data_dir', default="review_rebuttal_pair_dataset/",
+parser.add_argument('-i', '--data_dir', default="data/review_rebuttal_pair_dataset/",
     type=str, help='path to database file')
-parser.add_argument('-v', '--version', type=str, default="0.0",
+parser.add_argument('-v', '--version', type=str, default="0.1",
                     help='version of ICLR discourse database')
 parser.add_argument('-d', '--debug', action='store_true',
                     help='truncate to small subset of data for debugging')
@@ -37,8 +37,28 @@ HASHES_V0_0_debug = Hashes(
     truetest="f4e02d67a7a205205ceb0c529ed6377c",
 )
 
-HASH_LIST_LOOKUP = {"0.0":  HASHES_V0_0,
-                    "0.0_debug": HASHES_V0_0_debug}
+HASHES_V0_1 = Hashes(
+    unstructured="1b1e2b13dcd8912b001067f35ecc94dd",
+    traindev_train="d22e81671c06e42a0f4e0d0666ebefbd",
+    traindev_dev="e6ba473f5ce98e09bebb828f57155b43",
+    traindev_test="55a85c680efa63f4a92fc83f7271f4e7",
+    truetest="c37b170ccc6f4885d60d6856e2725e49",
+)
+
+HASHES_V0_1_debug = Hashes(
+    unstructured="a3304183f7eb16b86df5f630f0791afa",
+    traindev_train="0dc10ca048a0452a3714d06c0ab4a9b0",
+    traindev_dev="5ee081bd1a70a5b5275c67139528d78b",
+    traindev_test="702dbcdac732f9ecdf7d375019170e1d",
+    truetest="c1e961ae8a66848c764c8dc041285c10",
+)
+
+
+HASH_LIST_LOOKUP = {
+                    "0.0":  HASHES_V0_0,
+                    "0.0_debug": HASHES_V0_0_debug,
+                    "0.1":  HASHES_V0_1,
+                    }
 
 
 
@@ -58,6 +78,7 @@ def main():
         md5_hash = hashlib.md5()
         md5_hash.update(open(data_dir + dataset +".json", "rb").read())
         digest = md5_hash.hexdigest()
+        print(dataset, digest)
         if digest == correct_hash:
             print(dataset, "OK")
         else:
